@@ -23,7 +23,7 @@ from app.services.email_templates import (
     subject_selection,
     subject_transfer,
 )
-from app.services.inscriptions import ensure_listes_exist, resequence_rangs_pour_liste
+from app.services.inscriptions import ensure_listes_exist
 from app.services.notify_helpers import collect_admin_emails
 from app.services.runtime_settings_store import merge_with_defaults, read_settings, write_settings
 
@@ -828,10 +828,9 @@ def valider_desistement(
     demande.statut = DemandeStatut.DESISTEE
     demande.updated_at = datetime.now(timezone.utc)
     validated_at = datetime.now(timezone.utc)
-    liste_id = int(demande.liste_id)
+    # Ne pas renuméroter : le rang reste celui d’avant désistement jusqu’à une éventuelle réinscription
+    # (`resequence_rangs_pour_liste` dans `reinscrire_desiste`).
     db.delete(d)
-    db.flush()
-    resequence_rangs_pour_liste(db, liste_id)
     db.commit()
 
     admin_emails = collect_admin_emails(db)
