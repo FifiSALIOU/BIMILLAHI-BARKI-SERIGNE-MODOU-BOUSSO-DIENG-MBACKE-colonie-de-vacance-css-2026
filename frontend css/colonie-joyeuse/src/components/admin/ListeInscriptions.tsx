@@ -23,6 +23,7 @@ type Row = {
   parentNom: string;
   parentPrenom: string;
   parentService: string;
+  parentAgence: string;
   enfantNom: string;
   enfantPrenom: string;
   dateNaissance: string;
@@ -67,6 +68,7 @@ export default function ListeInscriptions() {
             parentNom: d.parent_nom,
             parentPrenom: d.parent_prenom,
             parentService: d.parent_service || '',
+            parentAgence: d.parent_site || '',
             enfantNom: d.enfant?.nom || '',
             enfantPrenom: d.enfant?.prenom || '',
             dateNaissance: d.enfant?.date_naissance || '',
@@ -117,9 +119,9 @@ export default function ListeInscriptions() {
   });
 
   const generateData = () => {
-    const headers = ['Rang', 'Matricule', 'Nom Parent', 'Prénom Parent', 'Service', 'Nom Enfant', 'Prénom Enfant', 'Âge', 'Sexe', 'Statut', 'Liste', 'Inscrit le'];
+    const headers = ['Rang', 'Matricule', 'Nom Parent', 'Prénom Parent', 'Service', 'Agence', 'Nom Enfant', 'Prénom Enfant', 'Âge', 'Sexe', 'Statut', 'Liste', 'Inscrit le'];
     const dataRows = filtered.map((e) => {
-      return [e.rang, e.parentMatricule, e.parentNom || '', e.parentPrenom || '', e.parentService || '', e.enfantNom, e.enfantPrenom, age(e.dateNaissance), e.sexe === 'M' ? 'M' : 'F', e.statut, getListeLabel(e.liste), new Date(e.dateInscription).toLocaleDateString('fr-FR')];
+      return [e.rang, e.parentMatricule, e.parentNom || '', e.parentPrenom || '', e.parentService || '', e.parentAgence || '', e.enfantNom, e.enfantPrenom, age(e.dateNaissance), e.sexe === 'M' ? 'M' : 'F', e.statut, getListeLabel(e.liste), new Date(e.dateInscription).toLocaleDateString('fr-FR')];
     });
     return { headers, rows: dataRows };
   };
@@ -178,6 +180,7 @@ export default function ListeInscriptions() {
                 <TableHead className="font-semibold">Nom du parent</TableHead>
                 <TableHead className="font-semibold">Prénom du parent</TableHead>
                 <TableHead className="font-semibold">Service</TableHead>
+                <TableHead className="font-semibold">Agence</TableHead>
                 <TableHead className="font-semibold">Prénom Enfant</TableHead>
                 <TableHead className="font-semibold">Nom Enfant</TableHead>
                 <TableHead className="font-semibold">Âge</TableHead>
@@ -195,6 +198,7 @@ export default function ListeInscriptions() {
                     <TableCell>{e.parentNom || '—'}</TableCell>
                     <TableCell>{e.parentPrenom || '—'}</TableCell>
                     <TableCell className="text-sm">{e.parentService || '—'}</TableCell>
+                    <TableCell className="text-sm">{e.parentAgence || '—'}</TableCell>
                     <TableCell>{e.enfantPrenom}</TableCell>
                     <TableCell className="font-medium">{e.enfantNom}</TableCell>
                     <TableCell>{age(e.dateNaissance)} ans</TableCell>

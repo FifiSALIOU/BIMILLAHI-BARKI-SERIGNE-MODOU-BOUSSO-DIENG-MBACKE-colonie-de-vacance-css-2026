@@ -388,6 +388,7 @@ def list_demandes_par_liste(
             "parent_prenom": p.prenom,
             "parent_nom": p.nom,
             "parent_service": p.service_text,
+            "parent_site": p.site_text or None,
             "enfant": {
                 "id": e.id,
                 "prenom": e.prenom,
