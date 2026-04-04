@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, text
@@ -59,19 +59,10 @@ def _next_rang_for_liste(db: Session, liste_id: int) -> int:
     return int(current_max) + 1
 
 
-def _ordre_arrivee_cle(d: DemandeInscription) -> tuple[float, int]:
-    """Même règle que le front (`ordreArriveeListe`) : réinscription SOUMISE avec `updated_at` utilise cet horodatage."""
-    if d.statut == DemandeStatut.SOUMISE and d.updated_at is not None:
-        return (d.updated_at.timestamp(), d.id)
-    debut = datetime.combine(d.date_inscription, time.min, tzinfo=timezone.utc)
-    return (debut.timestamp(), d.id)
-
-
-def resequence_rangs_pour_liste(db: Session, liste_id: int) -> None:
+def resequence_rangs_pour_liste(db: Session, liste_id: int, *, demande_reinscrite_id: int) -> None:
     """
-    Renumérote `rang_dans_liste` pour une liste : d’abord les demandes actives (non désistées)
-    selon l’ordre d’arrivée, puis les désistées (ordre stable par ancien rang).
-    Évite le bug « max(rang) + 1 » après désistement (trous de numérotation) et l’unicité (liste_id, rang).
+    Après réinscription : les actifs (hors la ligne réinscrite) gardent l’ordre des rangs actuels
+    (1,2,4 → 1,2,3) ; la demande réinscrite est seule en dernière position. Les désistés restent après.
     """
     db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": int(liste_id)})
     rows = (
@@ -85,7 +76,15 @@ def resequence_rangs_pour_liste(db: Session, liste_id: int) -> None:
 
     active = [d for d in rows if d.statut != DemandeStatut.DESISTEE]
     desistees = [d for d in rows if d.statut == DemandeStatut.DESISTEE]
-    active_sorted = sorted(active, key=_ordre_arrivee_cle)
+    rein = [d for d in active if int(d.id) == int(demande_reinscrite_id)]
+    others = [d for d in active if int(d.id) != int(demande_reinscrite_id)]
+    if not rein:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Réinscription : demande introuvable parmi les actifs de la liste.",
+        )
+    others_sorted = sorted(others, key=lambda d: (d.rang_dans_liste, d.id))
+    active_sorted = others_sorted + rein
     desist_sorted = sorted(desistees, key=lambda x: (x.rang_dans_liste, x.id))
 
     temp = -1
@@ -393,5 +392,5 @@ def reinscrire_desiste(*, db: Session, user: User, demande_id: int) -> DemandeIn
     demande.non_validation_reason = ""
     demande.updated_at = datetime.now(timezone.utc)
     db.flush()
-    resequence_rangs_pour_liste(db, int(demande.liste_id))
+    resequence_rangs_pour_liste(db, int(demande.liste_id), demande_reinscrite_id=int(demande.id))
     return demande
