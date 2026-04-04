@@ -38,6 +38,7 @@ type Enfant = {
   parentNom?: string;
   parentPrenom?: string;
   parentService?: string;
+  parentAgence?: string;
   parentEmail?: string;
   parentTelephone?: string;
   rang: number;
@@ -140,6 +141,7 @@ export default function GestionListe({ type }: Props) {
         parentNom: d.parent_nom,
         parentPrenom: d.parent_prenom,
         parentService: d.parent_service,
+        parentAgence: d.parent_site || '',
         rang: d.rang || 0,
         reinscrit: !!d.is_reinscrit,
       };
@@ -246,9 +248,9 @@ export default function GestionListe({ type }: Props) {
   };
 
   const generateCSV = () => {
-    const headers = ['Rang', 'Matricule', 'Nom Parent', 'Prénom Parent', 'Service', 'Nom Enfant', 'Prénom Enfant', 'Âge', 'Sexe', 'Statut', 'Informations', 'Désistement'];
+    const headers = ['Rang', 'Matricule', 'Nom Parent', 'Prénom Parent', 'Service', 'Agence', 'Nom Enfant', 'Prénom Enfant', 'Âge', 'Sexe', 'Statut', 'Informations', 'Désistement'];
     const rows = enfantsOrdreArrivee.map((e) => {
-      return [e.rang, e.parentMatricule, e.parentNom || '', e.parentPrenom || '', e.parentService || '', e.nom, e.prenom, calculateAge(e.dateNaissance), e.sexe === 'M' ? 'Masculin' : 'Féminin', e.statut, e.validation || 'en_attente', e.desistement || 'Aucun'];
+      return [e.rang, e.parentMatricule, e.parentNom || '', e.parentPrenom || '', e.parentService || '', e.parentAgence || '', e.nom, e.prenom, calculateAge(e.dateNaissance), e.sexe === 'M' ? 'Masculin' : 'Féminin', e.statut, e.validation || 'en_attente', e.desistement || 'Aucun'];
     });
     return { headers, rows };
   };
@@ -327,6 +329,7 @@ export default function GestionListe({ type }: Props) {
                 <TableHead className="font-semibold">Nom du parent</TableHead>
                 <TableHead className="font-semibold">Prénom du parent</TableHead>
                 <TableHead className="font-semibold">Service</TableHead>
+                <TableHead className="font-semibold">Agence</TableHead>
                 <TableHead className="font-semibold">Prénom Enfant</TableHead>
                 <TableHead className="font-semibold">Nom Enfant</TableHead>
                 <TableHead className="font-semibold">Âge</TableHead>
@@ -338,7 +341,7 @@ export default function GestionListe({ type }: Props) {
             </TableHeader>
             <TableBody>
               {enfantsOrdreArrivee.length === 0 ? (
-                <TableRow><TableCell colSpan={12} className="text-center py-12 text-muted-foreground">Aucun enfant dans cette liste</TableCell></TableRow>
+                <TableRow><TableCell colSpan={13} className="text-center py-12 text-muted-foreground">Aucun enfant dans cette liste</TableCell></TableRow>
               ) : (
                 enfantsOrdreArrivee.map((e) => {
                   const p = { nom: e.parentNom, prenom: e.parentPrenom, service: e.parentService, email: e.parentEmail, telephone: e.parentTelephone };
@@ -350,6 +353,7 @@ export default function GestionListe({ type }: Props) {
                       <TableCell>{p?.nom || '—'}</TableCell>
                       <TableCell>{p?.prenom || '—'}</TableCell>
                       <TableCell className="text-sm">{p?.service || '—'}</TableCell>
+                      <TableCell className="text-sm">{e.parentAgence || '—'}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           {e.prenom}
