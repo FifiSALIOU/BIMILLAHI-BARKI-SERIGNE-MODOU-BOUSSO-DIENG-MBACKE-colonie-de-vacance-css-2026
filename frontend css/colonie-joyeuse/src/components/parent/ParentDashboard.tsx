@@ -15,9 +15,9 @@ import {
   type ListeFinaleRowApi,
 } from '@/lib/parentDemandeMapping';
 import {
+  compareEnfantsOrdreArrivee,
   idDemandePourRang,
   rangAfficheParDemandeIdPourEnfants,
-  trierEnfantsParOrdreArrivee,
 } from '@/lib/ordreArriveeListe';
 import { Users, UserCheck, Clock, Star, Award, AlertTriangle, Lock, UserPlus, ArrowUpDown, HandMetal, XCircle, RotateCcw, Hash, Search, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -110,7 +110,7 @@ export default function ParentDashboard() {
   const allEnfants = transparenceEnfants;
   const allParents = transparenceParents;
 
-  /** Rang affiché (1…n) par liste — même règle que la gestion des listes (ordre d’arrivée, pas `rang_dans_liste`). */
+  /** Fallback si `rangListe` absent (données mock) — ordre d’arrivée. Les données API ont `rangListe` = `rang_dans_liste`. */
   const rangAfficheParListe = useMemo(() => {
     const keys: Enfant['liste'][] = ['principale', 'attente_n1', 'attente_n2'];
     const out: Record<string, Map<number, number>> = {};
@@ -244,6 +244,7 @@ export default function ParentDashboard() {
   const getRangDansListeLocal = (id: string) => {
     const e = enfants.find((x) => x.id === id);
     if (!e) return 0;
+    if (typeof e.rangListe === 'number' && e.rangListe > 0) return e.rangListe;
     const did = idDemandePourRang(e);
     if (did < 0) return 0;
     return rangAfficheParListe[e.liste]?.get(did) ?? 0;
@@ -267,9 +268,17 @@ export default function ParentDashboard() {
     }, 100);
   };
 
-  // List data for tabs
+  // List data for tabs — aligné sur `rang_dans_liste` (champ `rangListe`) comme côté gestionnaire
   const getListeEnfants = (liste: string) => {
-    return trierEnfantsParOrdreArrivee(allEnfants.filter((e) => e.liste === liste));
+    const subset = allEnfants.filter((e) => e.liste === liste);
+    return [...subset].sort((a, b) => {
+      const hasA = typeof a.rangListe === 'number';
+      const hasB = typeof b.rangListe === 'number';
+      if (hasA && hasB && a.rangListe !== b.rangListe) return (a.rangListe as number) - (b.rangListe as number);
+      if (hasA && !hasB) return -1;
+      if (!hasA && hasB) return 1;
+      return compareEnfantsOrdreArrivee(a, b);
+    });
   };
 
   const getStatutBadge = (statut: string) => {
@@ -318,7 +327,12 @@ export default function ParentDashboard() {
                   const p = allParents.find(x => x.matricule === e.parentMatricule);
                   const isHighlighted = highlightedEnfantId === e.id;
                   const did = idDemandePourRang(e);
-                  const rangAff = did >= 0 ? rangMapFiltre.get(did) : undefined;
+                  const rangAff =
+                    typeof e.rangListe === 'number' && e.rangListe > 0
+                      ? e.rangListe
+                      : did >= 0
+                        ? rangMapFiltre.get(did)
+                        : undefined;
                   return (
                     <TableRow key={e.id} className={`transition-colors duration-500 ${isHighlighted ? 'bg-accent/20 ring-2 ring-accent ring-inset' : ''}`} id={`enfant-row-${e.id}`}>
                       <TableCell className="font-bold text-foreground">{rangAff ?? '—'}</TableCell>

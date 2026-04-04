@@ -51,6 +51,7 @@ export default function ToutesInscriptions() {
   });
 
   const getRang = (enfant: (typeof enfants)[0]) => {
+    if (typeof enfant.rangListe === 'number' && enfant.rangListe > 0) return enfant.rangListe;
     const listeEnfants = enfants.filter((e) => e.liste === enfant.liste);
     const m = rangAfficheParDemandeIdPourEnfants(listeEnfants);
     const did = idDemandePourRang(enfant);

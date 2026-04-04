@@ -189,6 +189,7 @@ export function InscriptionProvider({ children }: { children: ReactNode }) {
   const getRangDansListe = (enfantId: string) => {
     const enfant = enfants.find(e => e.id === enfantId);
     if (!enfant) return 0;
+    if (typeof enfant.rangListe === 'number' && enfant.rangListe > 0) return enfant.rangListe;
     const listeEnfants = enfants.filter(e => e.liste === enfant.liste);
     const m = rangAfficheParDemandeIdPourEnfants(listeEnfants);
     const did = idDemandePourRang(enfant);
