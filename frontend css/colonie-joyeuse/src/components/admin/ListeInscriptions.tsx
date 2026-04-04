@@ -10,11 +10,12 @@ import autoTable from 'jspdf-autotable';
 import { exportStyledExcel } from '@/lib/excelExport';
 import { apiRequest } from '@/lib/api';
 import { listeApiToUi, listeUiToApi, statutLabelFromListeUi } from '@/lib/listeCodes';
-import { compareOrdreArrivee, type OrdreArriveeInput } from '@/lib/ordreArriveeListe';
 
 type Row = {
   id: string;
   demandeId: number;
+  /** `rang_dans_liste` côté API — même règle que la gestion des listes */
+  rang: number;
   updatedAt?: string | null;
   reinscrit?: boolean;
   desistementValide: boolean;
@@ -40,15 +41,6 @@ const age = (d: string) => {
   return a;
 };
 
-const rowVersOrdre = (r: Row): OrdreArriveeInput => ({
-  id: r.id,
-  demandeId: r.demandeId,
-  dateInscription: r.dateInscription,
-  updatedAt: r.updatedAt ?? null,
-  reinscrit: !!r.reinscrit,
-  desistementValide: r.desistementValide,
-});
-
 export default function ListeInscriptions() {
   const { token } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,6 +59,7 @@ export default function ListeInscriptions() {
           return {
             id: String(d.demande_id),
             demandeId: d.demande_id,
+            rang: Number(d.rang) || 0,
             updatedAt: d.updated_at ?? null,
             reinscrit: !!d.is_reinscrit,
             desistementValide: String(d.statut || '') === 'DESISTEE',
@@ -93,7 +86,9 @@ export default function ListeInscriptions() {
       const pa = prio[a.liste];
       const pb = prio[b.liste];
       if (pa !== pb) return pa - pb;
-      return compareOrdreArrivee(rowVersOrdre(a), rowVersOrdre(b));
+      const dr = a.rang - b.rang;
+      if (dr !== 0) return dr;
+      return a.demandeId - b.demandeId;
     });
   }, [rows]);
 
@@ -121,24 +116,10 @@ export default function ListeInscriptions() {
     return e.parentMatricule.toLowerCase().includes(s) || e.enfantNom.toLowerCase().includes(s) || e.enfantPrenom.toLowerCase().includes(s) || e.parentNom.toLowerCase().includes(s);
   });
 
-  const rangAfficheParListe = useMemo(() => {
-    const keys: Row['liste'][] = ['principale', 'attente_n1', 'attente_n2'];
-    const out: Record<string, Map<number, number>> = {};
-    for (const l of keys) {
-      const subset = filtered.filter((e) => e.liste === l);
-      const sorted = [...subset].sort((a, b) => compareOrdreArrivee(rowVersOrdre(a), rowVersOrdre(b)));
-      const m = new Map<number, number>();
-      sorted.forEach((r, i) => m.set(r.demandeId, i + 1));
-      out[l] = m;
-    }
-    return out;
-  }, [filtered]);
-
   const generateData = () => {
     const headers = ['Rang', 'Matricule', 'Nom Parent', 'Prénom Parent', 'Service', 'Nom Enfant', 'Prénom Enfant', 'Âge', 'Sexe', 'Statut', 'Liste', 'Inscrit le'];
     const dataRows = filtered.map((e) => {
-      const rangAff = rangAfficheParListe[e.liste]?.get(e.demandeId) ?? '';
-      return [rangAff, e.parentMatricule, e.parentNom || '', e.parentPrenom || '', e.parentService || '', e.enfantNom, e.enfantPrenom, age(e.dateNaissance), e.sexe === 'M' ? 'M' : 'F', e.statut, getListeLabel(e.liste), new Date(e.dateInscription).toLocaleDateString('fr-FR')];
+      return [e.rang, e.parentMatricule, e.parentNom || '', e.parentPrenom || '', e.parentService || '', e.enfantNom, e.enfantPrenom, age(e.dateNaissance), e.sexe === 'M' ? 'M' : 'F', e.statut, getListeLabel(e.liste), new Date(e.dateInscription).toLocaleDateString('fr-FR')];
     });
     return { headers, rows: dataRows };
   };
@@ -170,7 +151,7 @@ export default function ListeInscriptions() {
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Toutes les inscriptions</h1>
-          <p className="text-muted-foreground mt-1">{rows.length} inscription(s) — rang affiché = ordre d&apos;arrivée par liste (comme en gestion des listes)</p>
+          <p className="text-muted-foreground mt-1">{rows.length} inscription(s) — rang = position dans chaque liste (aligné sur la base de données)</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={exportExcel} variant="outline" className="gap-2 rounded-lg">
@@ -207,11 +188,9 @@ export default function ListeInscriptions() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((e) => {
-                const rangAff = rangAfficheParListe[e.liste]?.get(e.demandeId);
-                return (
+              {filtered.map((e) => (
                   <TableRow key={e.id}>
-                    <TableCell className="font-bold text-foreground text-center">{rangAff ?? '—'}</TableCell>
+                    <TableCell className="font-bold text-foreground text-center">{e.rang || '—'}</TableCell>
                     <TableCell className="font-mono tabular-nums text-sm">{e.parentMatricule}</TableCell>
                     <TableCell>{e.parentNom || '—'}</TableCell>
                     <TableCell>{e.parentPrenom || '—'}</TableCell>
@@ -228,8 +207,7 @@ export default function ListeInscriptions() {
                     </TableCell>
                     <TableCell className="tabular-nums text-sm text-muted-foreground">{new Date(e.dateInscription).toLocaleDateString('fr-FR')}</TableCell>
                   </TableRow>
-                );
-              })}
+              ))}
             </TableBody>
           </Table>
         </div>
