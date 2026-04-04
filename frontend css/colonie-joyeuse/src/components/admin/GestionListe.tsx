@@ -17,7 +17,6 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/api';
 import { listeApiToUi, listeUiToApi, statutLabelFromListeUi, type ListeUi } from '@/lib/listeCodes';
-import { compareOrdreArrivee, type OrdreArriveeInput } from '@/lib/ordreArriveeListe';
 
 type Enfant = {
   id: string;
@@ -154,15 +153,6 @@ export default function GestionListe({ type }: Props) {
     }).catch(() => undefined);
   }, [token, type, refreshTick]);
 
-  const adminRowVersOrdre = (e: Enfant): OrdreArriveeInput => ({
-    id: e.id,
-    demandeId: e.demandeId,
-    dateInscription: e.dateInscription,
-    updatedAt: e.updatedAt ?? null,
-    reinscrit: !!e.reinscrit,
-    desistementValide: e.desistement === 'validé',
-  });
-
   const filteredEnfants = enfants.filter(e => {
     const p = { nom: e.parentNom, prenom: e.parentPrenom };
     const matchSearch = searchTerm === '' ||
@@ -182,15 +172,17 @@ export default function GestionListe({ type }: Props) {
   });
 
   /**
-   * Affichage : lignes + rang 1,2,3… selon l’ordre d’arrivée réel (réinscription = `updated_at`),
-   * aligné sur `@/lib/ordreArriveeListe` — `rang_dans_liste` inchangé en base.
+   * Tri et colonne Rang : `rang_dans_liste` (API) — aligné sur le backend après désistement / réinscription.
+   * Une demande désistée reste donc à sa place (ex. rang 2 si elle était dernière des actifs avant désistement).
    */
   const { enfantsOrdreArrivee, rangAfficheParDemandeId } = useMemo(() => {
-    const sorted = [...filteredEnfants].sort((a, b) =>
-      compareOrdreArrivee(adminRowVersOrdre(a), adminRowVersOrdre(b)),
-    );
+    const sorted = [...filteredEnfants].sort((a, b) => {
+      const dr = a.rang - b.rang;
+      if (dr !== 0) return dr;
+      return a.demandeId - b.demandeId;
+    });
     const m = new Map<number, number>();
-    sorted.forEach((e, i) => m.set(e.demandeId, i + 1));
+    sorted.forEach((e) => m.set(e.demandeId, e.rang));
     return { enfantsOrdreArrivee: sorted, rangAfficheParDemandeId: m };
   }, [filteredEnfants]);
 
@@ -255,8 +247,8 @@ export default function GestionListe({ type }: Props) {
 
   const generateCSV = () => {
     const headers = ['Rang', 'Matricule', 'Nom Parent', 'Prénom Parent', 'Service', 'Nom Enfant', 'Prénom Enfant', 'Âge', 'Sexe', 'Statut', 'Informations', 'Désistement'];
-    const rows = enfantsOrdreArrivee.map((e, i) => {
-      return [i + 1, e.parentMatricule, e.parentNom || '', e.parentPrenom || '', e.parentService || '', e.nom, e.prenom, calculateAge(e.dateNaissance), e.sexe === 'M' ? 'Masculin' : 'Féminin', e.statut, e.validation || 'en_attente', e.desistement || 'Aucun'];
+    const rows = enfantsOrdreArrivee.map((e) => {
+      return [e.rang, e.parentMatricule, e.parentNom || '', e.parentPrenom || '', e.parentService || '', e.nom, e.prenom, calculateAge(e.dateNaissance), e.sexe === 'M' ? 'Masculin' : 'Féminin', e.statut, e.validation || 'en_attente', e.desistement || 'Aucun'];
     });
     return { headers, rows };
   };
@@ -290,7 +282,7 @@ export default function GestionListe({ type }: Props) {
           <span className={`w-3 h-3 rounded-full ${dotColors[type]}`} />
           <div>
             <h1 className="text-2xl font-bold text-foreground">{titles[type]}</h1>
-            <p className="text-muted-foreground mt-1"><strong>{enfants.length}</strong> enfant(s) — classés par ordre d'arrivée</p>
+            <p className="text-muted-foreground mt-1"><strong>{enfants.length}</strong> enfant(s) — classés par rang dans la liste</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -348,12 +340,12 @@ export default function GestionListe({ type }: Props) {
               {enfantsOrdreArrivee.length === 0 ? (
                 <TableRow><TableCell colSpan={12} className="text-center py-12 text-muted-foreground">Aucun enfant dans cette liste</TableCell></TableRow>
               ) : (
-                enfantsOrdreArrivee.map((e, i) => {
+                enfantsOrdreArrivee.map((e) => {
                   const p = { nom: e.parentNom, prenom: e.parentPrenom, service: e.parentService, email: e.parentEmail, telephone: e.parentTelephone };
                   const validation = e.validation || 'en_attente';
                   return (
                     <TableRow key={e.id} className={e.desistement === 'validé' ? 'opacity-50' : ''}>
-                      <TableCell className="font-bold text-foreground text-center">{i + 1}</TableCell>
+                      <TableCell className="font-bold text-foreground text-center">{e.rang}</TableCell>
                       <TableCell className="font-mono tabular-nums text-sm">{e.parentMatricule}</TableCell>
                       <TableCell>{p?.nom || '—'}</TableCell>
                       <TableCell>{p?.prenom || '—'}</TableCell>
@@ -446,7 +438,7 @@ export default function GestionListe({ type }: Props) {
                     <div><span className="text-muted-foreground">Âge :</span> {calculateAge(detailEnfant.dateNaissance)} ans</div>
                     <div><span className="text-muted-foreground">Sexe :</span> {detailEnfant.sexe === 'M' ? 'Masculin' : 'Féminin'}</div>
                     <div><span className="text-muted-foreground">Lien :</span> {detailEnfant.lienParente}</div>
-                    <div><span className="text-muted-foreground">Rang (ordre d&apos;arrivée) :</span> {rangAfficheParDemandeId.get(detailEnfant.demandeId) ?? '—'}</div>
+                    <div><span className="text-muted-foreground">Rang dans la liste :</span> {rangAfficheParDemandeId.get(detailEnfant.demandeId) ?? detailEnfant.rang ?? '—'}</div>
                   </div>
                 </div>
                 <div className="text-xs text-muted-foreground pt-2 border-t border-border">Inscrit le {new Date(detailEnfant.dateInscription).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
