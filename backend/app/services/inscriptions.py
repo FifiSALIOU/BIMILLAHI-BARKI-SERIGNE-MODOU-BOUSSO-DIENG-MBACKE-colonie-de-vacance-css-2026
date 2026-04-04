@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, text
@@ -57,6 +57,51 @@ def _next_rang_for_liste(db: Session, liste_id: int) -> int:
         DemandeInscription.liste_id == liste_id
     ).scalar()
     return int(current_max) + 1
+
+
+def _ordre_arrivee_cle(d: DemandeInscription) -> tuple[float, int]:
+    """Même règle que le front (`ordreArriveeListe`) : réinscription SOUMISE avec `updated_at` utilise cet horodatage."""
+    if d.statut == DemandeStatut.SOUMISE and d.updated_at is not None:
+        return (d.updated_at.timestamp(), d.id)
+    debut = datetime.combine(d.date_inscription, time.min, tzinfo=timezone.utc)
+    return (debut.timestamp(), d.id)
+
+
+def resequence_rangs_pour_liste(db: Session, liste_id: int) -> None:
+    """
+    Renumérote `rang_dans_liste` pour une liste : d’abord les demandes actives (non désistées)
+    selon l’ordre d’arrivée, puis les désistées (ordre stable par ancien rang).
+    Évite le bug « max(rang) + 1 » après désistement (trous de numérotation) et l’unicité (liste_id, rang).
+    """
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": int(liste_id)})
+    rows = (
+        db.query(DemandeInscription)
+        .filter(DemandeInscription.liste_id == liste_id)
+        .order_by(DemandeInscription.id.asc())
+        .all()
+    )
+    if not rows:
+        return
+
+    active = [d for d in rows if d.statut != DemandeStatut.DESISTEE]
+    desistees = [d for d in rows if d.statut == DemandeStatut.DESISTEE]
+    active_sorted = sorted(active, key=_ordre_arrivee_cle)
+    desist_sorted = sorted(desistees, key=lambda x: (x.rang_dans_liste, x.id))
+
+    temp = -1
+    for d in rows:
+        d.rang_dans_liste = temp
+        temp -= 1
+    db.flush()
+
+    r = 1
+    for d in active_sorted:
+        d.rang_dans_liste = r
+        r += 1
+    for d in desist_sorted:
+        d.rang_dans_liste = r
+        r += 1
+    db.flush()
 
 
 def _get_max_enfants_par_parent(db: Session) -> int:
@@ -344,23 +389,9 @@ def reinscrire_desiste(*, db: Session, user: User, demande_id: int) -> DemandeIn
             detail="Réinscription impossible : un désistement est encore en cours de traitement.",
         )
 
-    # Réinscription: conserver le rang courant si l'enfant est toujours le dernier
-    # (aucune nouvelle demande derrière lui). Sinon, le placer en fin de liste.
-    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": int(demande.liste_id)})
-    max_other = (
-        db.query(func.coalesce(func.max(DemandeInscription.rang_dans_liste), 0))
-        .filter(
-            DemandeInscription.liste_id == demande.liste_id,
-            DemandeInscription.id != demande.id,
-        )
-        .scalar()
-    )
-    max_other = int(max_other or 0)
-    current_rang = int(demande.rang_dans_liste)
-    demande.rang_dans_liste = current_rang if max_other < current_rang else (max_other + 1)
     demande.statut = DemandeStatut.SOUMISE
     demande.non_validation_reason = ""
     demande.updated_at = datetime.now(timezone.utc)
-
     db.flush()
+    resequence_rangs_pour_liste(db, int(demande.liste_id))
     return demande
