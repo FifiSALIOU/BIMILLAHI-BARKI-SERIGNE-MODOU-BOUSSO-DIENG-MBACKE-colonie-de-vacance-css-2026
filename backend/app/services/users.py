@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from typing import Optional
 
 from fastapi import HTTPException, status
@@ -173,7 +174,9 @@ def create_user_superadmin(
         if not email:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email requis pour ce rôle.")
         if not matricule:
-            matricule = str(email).split("@")[0][:191]
+            # Ne pas réutiliser la partie locale de l'e-mail : elle coïncide souvent avec le
+            # matricule d'un compte PARENT (login par matricule). Les admins se connectent par e-mail.
+            matricule = f"adm_{secrets.token_hex(10)}"
         email_norm = str(email).strip()
         email_key = email_norm.lower()[:100]
         existing_admin = (
@@ -192,6 +195,14 @@ def create_user_superadmin(
             )
         existing_mat = db.query(User).filter(User.matricule == matricule).first()
         if existing_mat:
+            if existing_mat.role == UserRole.PARENT:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Ce matricule est déjà utilisé par un compte parent. "
+                        "Choisissez un autre matricule pour cet administrateur (la connexion admin reste par e-mail)."
+                    ),
+                )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Ce matricule ou identifiant de connexion est déjà utilisé.",
