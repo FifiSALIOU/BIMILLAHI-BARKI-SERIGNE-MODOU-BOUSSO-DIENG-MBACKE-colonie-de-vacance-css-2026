@@ -174,6 +174,28 @@ def create_user_superadmin(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email requis pour ce rôle.")
         if not matricule:
             matricule = str(email).split("@")[0][:191]
+        email_norm = str(email).strip()
+        email_key = email_norm.lower()[:100]
+        existing_admin = (
+            db.query(User)
+            .filter(
+                User.role.in_((UserRole.GESTIONNAIRE, UserRole.SUPER_ADMIN)),
+                User.remember_token.isnot(None),
+                func.lower(User.remember_token) == email_key,
+            )
+            .first()
+        )
+        if existing_admin:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Un compte administrateur existe déjà avec cette adresse e-mail.",
+            )
+        existing_mat = db.query(User).filter(User.matricule == matricule).first()
+        if existing_mat:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ce matricule ou identifiant de connexion est déjà utilisé.",
+            )
         user = User(
             role=role,
             name=name,
