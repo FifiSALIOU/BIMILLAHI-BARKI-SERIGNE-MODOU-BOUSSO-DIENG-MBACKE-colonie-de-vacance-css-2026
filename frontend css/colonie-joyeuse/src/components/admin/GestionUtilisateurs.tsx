@@ -32,6 +32,7 @@ export default function GestionUtilisateurs() {
   const [newRole, setNewRole] = useState<'gestionnaire' | 'super_admin'>('gestionnaire');
   const [newTelephone, setNewTelephone] = useState('');
   const [createAdminSubmitting, setCreateAdminSubmitting] = useState(false);
+  const [editAdminSubmitting, setEditAdminSubmitting] = useState(false);
 
   // Parent creation
   const [createParentOpen, setCreateParentOpen] = useState(false);
@@ -253,18 +254,42 @@ export default function GestionUtilisateurs() {
 
   const handleEdit = async () => {
     if (!editingAdmin) return;
-    await apiRequest(`/admin/users/${editingAdmin.id}`, {
-      method: 'PATCH',
-      token,
-      body: JSON.stringify({
-        email: editingAdmin.email,
-        name: `${editingAdmin.prenom} ${editingAdmin.nom}`.trim(),
-        role: editingAdmin.role === 'super_admin' ? 'SUPER_ADMIN' : 'GESTIONNAIRE',
-      }),
-    });
-    await refreshUsers();
-    setEditOpen(false);
-    toast({ title: '✅ Modifié' });
+    const email = editingAdmin.email.trim();
+    const prenom = editingAdmin.prenom.trim();
+    const nom = editingAdmin.nom.trim();
+    if (!email || !nom || !prenom) {
+      toast({
+        title: 'Formulaire incomplet',
+        description: 'Renseignez le prénom, le nom et l\'adresse e-mail.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setEditAdminSubmitting(true);
+    try {
+      await apiRequest(`/admin/users/${editingAdmin.id}`, {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify({
+          email,
+          name: `${prenom} ${nom}`.trim(),
+          role: editingAdmin.role === 'super_admin' ? 'SUPER_ADMIN' : 'GESTIONNAIRE',
+        }),
+      });
+      await refreshUsers();
+      setEditOpen(false);
+      setEditingAdmin(null);
+      toast({
+        title: 'Modifications enregistrées',
+        description:
+          'Les informations ont été mises à jour. Si vous avez rétrogradé votre propre compte (super admin → gestionnaire), certaines pages admin afficheront une erreur d’accès.',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Une erreur est survenue.';
+      toast({ title: 'Enregistrement impossible', description: msg, variant: 'destructive' });
+    } finally {
+      setEditAdminSubmitting(false);
+    }
   };
 
   const handleCreateParent = async () => {
@@ -547,8 +572,11 @@ export default function GestionUtilisateurs() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-lg">Annuler</Button>
-            <Button onClick={handleEdit} className="rounded-lg bg-primary text-primary-foreground">Enregistrer</Button>
+            <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-lg" disabled={editAdminSubmitting}>Annuler</Button>
+            <Button onClick={() => void handleEdit()} disabled={editAdminSubmitting} className="rounded-lg bg-primary text-primary-foreground gap-2">
+              {editAdminSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {editAdminSubmitting ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
