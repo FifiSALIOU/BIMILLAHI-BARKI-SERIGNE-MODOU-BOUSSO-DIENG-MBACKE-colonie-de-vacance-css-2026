@@ -202,6 +202,7 @@ def create_user_superadmin(
             matricule=matricule,
             password=hash_password(password),
             is_active=True,
+            must_change_password=bool(must_change_password),
             remember_token=_stash_admin_email(email),
         )
         db.add(user)
@@ -325,6 +326,7 @@ def change_password_for_user(db: Session, *, user_id: int, new_password: str) ->
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
     user.password = hash_password(new_password)
+    user.must_change_password = False
     admin_must_change_store.clear_flag(user_id)
     db.flush()
 
@@ -336,6 +338,7 @@ def set_admin_temp_password(db: Session, *, user_id: int, temp_password: str) ->
     if user.role not in {UserRole.GESTIONNAIRE, UserRole.SUPER_ADMIN}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Réinitialisation automatique réservée aux administrateurs.")
     user.password = hash_password(temp_password)
+    user.must_change_password = True
     admin_must_change_store.set_flag(user_id, True)
     db.flush()
     return user
@@ -347,5 +350,6 @@ def change_password_self(db: Session, *, user: User, old_password: str, new_pass
     if not verify_password(old_password, user.password):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mot de passe actuel incorrect.")
     user.password = hash_password(new_password)
+    user.must_change_password = False
     admin_must_change_store.clear_flag(user.id)
     db.flush()

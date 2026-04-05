@@ -27,6 +27,7 @@ class User(Base):
     password: Mapped[str] = mapped_column(String(191), nullable=False)
     role: Mapped[UserRole] = mapped_column(IntEnumType(UserRole, USER_ROLE_TO_INT), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     remember_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

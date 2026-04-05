@@ -26,7 +26,8 @@ DEFAULT_PARENT_PASSWORD = "Passer123"
 def _must_change_password(user: User) -> bool:
     if user.role == UserRole.PARENT:
         return verify_password(DEFAULT_PARENT_PASSWORD, user.password)
-    return admin_must_change_store.get_flag(user.id)
+    # Colonne SQL (source de vérité) + fichier JSON historique pour compatibilité
+    return bool(user.must_change_password) or admin_must_change_store.get_flag(user.id)
 
 
 def _resolve_admin_login_user(db: Session, login: str) -> User | None:
@@ -86,12 +87,13 @@ def change_password_first_login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Endpoint reserve aux comptes administrateurs.",
         )
-    if not admin_must_change_store.get_flag(user.id):
+    if not user.must_change_password and not admin_must_change_store.get_flag(user.id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Aucun changement de mot de passe obligatoire n'est requis.",
         )
     user.password = hash_password(payload.new_password)
+    user.must_change_password = False
     admin_must_change_store.clear_flag(user.id)
     db.commit()
     return {"ok": True}
