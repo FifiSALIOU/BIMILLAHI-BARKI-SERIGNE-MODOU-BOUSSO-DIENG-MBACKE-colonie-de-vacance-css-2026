@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { UserPlus, Pencil, Trash2, Shield, Users, Upload, KeyRound, FileSpreadsheet } from 'lucide-react';
+import { UserPlus, Pencil, Trash2, Shield, Users, Upload, KeyRound, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
 import ImportExcel from './ImportExcel';
@@ -31,6 +31,7 @@ export default function GestionUtilisateurs() {
   const [newPrenom, setNewPrenom] = useState('');
   const [newRole, setNewRole] = useState<'gestionnaire' | 'super_admin'>('gestionnaire');
   const [newTelephone, setNewTelephone] = useState('');
+  const [createAdminSubmitting, setCreateAdminSubmitting] = useState(false);
 
   // Parent creation
   const [createParentOpen, setCreateParentOpen] = useState(false);
@@ -193,20 +194,41 @@ export default function GestionUtilisateurs() {
 
 
   const handleCreate = async () => {
-    if (!newEmail || !newNom || !newPrenom) return;
-    await apiRequest('/admin/users', {
-      method: 'POST',
-      token,
-      body: JSON.stringify({
-        email: newEmail,
-        name: `${newPrenom} ${newNom}`.trim(),
-        role: newRole === 'super_admin' ? 'SUPER_ADMIN' : 'GESTIONNAIRE',
-      }),
-    });
-    await refreshUsers();
-    setCreateOpen(false);
-    setNewEmail(''); setNewNom(''); setNewPrenom(''); setNewTelephone('');
-    toast({ title: '✅ Administrateur créé' });
+    const email = newEmail.trim();
+    const prenom = newPrenom.trim();
+    const nom = newNom.trim();
+    if (!email || !nom || !prenom) {
+      toast({
+        title: 'Formulaire incomplet',
+        description: 'Renseignez le prénom, le nom et l\'adresse e-mail.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setCreateAdminSubmitting(true);
+    try {
+      await apiRequest('/admin/users', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          email,
+          name: `${prenom} ${nom}`.trim(),
+          role: newRole === 'super_admin' ? 'SUPER_ADMIN' : 'GESTIONNAIRE',
+        }),
+      });
+      await refreshUsers();
+      setCreateOpen(false);
+      setNewEmail(''); setNewNom(''); setNewPrenom(''); setNewTelephone('');
+      toast({
+        title: 'Administrateur créé',
+        description: 'Le compte est enregistré. Le mot de passe temporaire est envoyé par e-mail si le serveur mail est configuré.',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Une erreur est survenue.';
+      toast({ title: 'Création impossible', description: msg, variant: 'destructive' });
+    } finally {
+      setCreateAdminSubmitting(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -491,8 +513,11 @@ export default function GestionUtilisateurs() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} className="rounded-lg">Annuler</Button>
-            <Button onClick={handleCreate} className="rounded-lg bg-primary text-primary-foreground">Créer</Button>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} className="rounded-lg" disabled={createAdminSubmitting}>Annuler</Button>
+            <Button onClick={() => void handleCreate()} disabled={createAdminSubmitting} className="rounded-lg bg-primary text-primary-foreground gap-2">
+              {createAdminSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {createAdminSubmitting ? 'Création…' : 'Créer'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
