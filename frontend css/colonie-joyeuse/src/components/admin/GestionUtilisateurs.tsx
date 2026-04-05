@@ -116,69 +116,78 @@ export default function GestionUtilisateurs() {
   }, [token]);
 
   const handleImportParents = async (data: any[]): Promise<ImportResult> => {
+    const results = await Promise.all(
+      data.map(async (row, i) => {
+        const ligne = i + 2;
+        if (!row.matricule || !row.prenom || !row.nom || !row.service) {
+          return { ok: false as const, ligne, message: 'Champs obligatoires manquants (matricule, prenom, nom, service)' };
+        }
+        try {
+          await apiRequest('/admin/users', {
+            method: 'POST',
+            token,
+            body: JSON.stringify({
+              matricule: row.matricule,
+              name: `${row.prenom} ${row.nom}`.trim(),
+              prenom: row.prenom,
+              nom: row.nom,
+              role: 'PARENT',
+              service: row.service,
+              site_code: row.site || null,
+              email: row.email || null,
+              telephone: row.telephone || null,
+            }),
+          });
+          return { ok: true as const, ligne };
+        } catch (e) {
+          return { ok: false as const, ligne, message: e instanceof Error ? e.message : 'Erreur API' };
+        }
+      }),
+    );
     let success = 0;
     const errors: { ligne: number; message: string }[] = [];
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-      if (!row.matricule || !row.prenom || !row.nom || !row.service) {
-        errors.push({ ligne: i + 2, message: 'Champs obligatoires manquants (matricule, prenom, nom, service)' });
-        continue;
-      }
-      try {
-        await apiRequest('/admin/users', {
-          method: 'POST',
-          token,
-          body: JSON.stringify({
-            matricule: row.matricule,
-            name: `${row.prenom} ${row.nom}`.trim(),
-            prenom: row.prenom,
-            nom: row.nom,
-            role: 'PARENT',
-            service: row.service,
-            site_code: row.site || null,
-            email: row.email || null,
-            telephone: row.telephone || null,
-          }),
-        });
-        success++;
-      } catch (e) {
-        errors.push({ ligne: i + 2, message: e instanceof Error ? e.message : 'Erreur API' });
-      }
+    for (const r of results) {
+      if (r.ok) success++;
+      else errors.push({ ligne: r.ligne, message: r.message });
     }
-    await refreshUsers();
+    void refreshUsers();
     return { success, errors };
   };
 
   const handleImportAdmins = async (data: any[]): Promise<ImportResult> => {
+    const results = await Promise.all(
+      data.map(async (row, i) => {
+        const ligne = i + 2;
+        if (!row.email || !row.prenom || !row.nom || !row.role) {
+          return { ok: false as const, ligne, message: 'Champs obligatoires manquants (email, prenom, nom, role)' };
+        }
+        const role = row.role.toLowerCase().trim();
+        if (role !== 'gestionnaire' && role !== 'super_admin') {
+          return { ok: false as const, ligne, message: `Rôle invalide "${row.role}" (gestionnaire ou super_admin)` };
+        }
+        try {
+          await apiRequest('/admin/users', {
+            method: 'POST',
+            token,
+            body: JSON.stringify({
+              email: row.email,
+              name: `${row.prenom} ${row.nom}`.trim(),
+              role: role === 'super_admin' ? 'SUPER_ADMIN' : 'GESTIONNAIRE',
+            }),
+          });
+          return { ok: true as const, ligne };
+        } catch (e) {
+          return { ok: false as const, ligne, message: e instanceof Error ? e.message : 'Erreur API' };
+        }
+      }),
+    );
     let success = 0;
     const errors: { ligne: number; message: string }[] = [];
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-      if (!row.email || !row.prenom || !row.nom || !row.role) {
-        errors.push({ ligne: i + 2, message: 'Champs obligatoires manquants (email, prenom, nom, role)' });
-        continue;
-      }
-      const role = row.role.toLowerCase().trim();
-      if (role !== 'gestionnaire' && role !== 'super_admin') {
-        errors.push({ ligne: i + 2, message: `Rôle invalide "${row.role}" (gestionnaire ou super_admin)` });
-        continue;
-      }
-      try {
-        await apiRequest('/admin/users', {
-          method: 'POST',
-          token,
-          body: JSON.stringify({
-            email: row.email,
-            name: `${row.prenom} ${row.nom}`.trim(),
-            role: role === 'super_admin' ? 'SUPER_ADMIN' : 'GESTIONNAIRE',
-          }),
-        });
-        success++;
-      } catch (e) {
-        errors.push({ ligne: i + 2, message: e instanceof Error ? e.message : 'Erreur API' });
-      }
+    for (const r of results) {
+      if (r.ok) success++;
+      else errors.push({ ligne: r.ligne, message: r.message });
     }
-    await refreshUsers();
+    void refreshUsers();
     return { success, errors };
   };
 

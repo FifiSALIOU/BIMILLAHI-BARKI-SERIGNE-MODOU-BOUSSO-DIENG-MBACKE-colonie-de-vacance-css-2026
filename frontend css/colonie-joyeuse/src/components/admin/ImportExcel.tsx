@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Download, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 export interface ImportResult {
@@ -36,17 +36,19 @@ interface Props {
 
 export default function ImportExcel({ open, onOpenChange, entities, singleEntity }: Props) {
   const [selectedEntity, setSelectedEntity] = useState(entities[0]?.value || '');
-  const [previewData, setPreviewData] = useState<any[]>([]);
+  /** Toutes les lignes du fichier (l’import utilise cette liste, pas seulement l’aperçu). */
+  const [fileRows, setFileRows] = useState<any[]>([]);
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
   const [fileName, setFileName] = useState('');
   const [result, setResult] = useState<ImportResult | null>(null);
   const [step, setStep] = useState<'select' | 'preview' | 'result'>('select');
+  const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentEntity = entities.find(e => e.value === selectedEntity) || entities[0];
 
   const reset = () => {
-    setPreviewData([]); setPreviewHeaders([]); setFileName(''); setResult(null); setStep('select');
+    setFileRows([]); setPreviewHeaders([]); setFileName(''); setResult(null); setStep('select'); setImporting(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -69,7 +71,7 @@ export default function ImportExcel({ open, onOpenChange, entities, singleEntity
         const json = XLSX.utils.sheet_to_json<any>(wb.Sheets[wb.SheetNames[0]], { defval: '' });
         if (!json.length) { toast({ title: '⚠️ Fichier vide', variant: 'destructive' }); return; }
         setPreviewHeaders(Object.keys(json[0]).map(h => h.toLowerCase().trim()));
-        setPreviewData(json.slice(0, 100));
+        setFileRows(json);
         setStep('preview');
       } catch { toast({ title: '❌ Erreur de lecture', variant: 'destructive' }); }
     };
@@ -77,17 +79,22 @@ export default function ImportExcel({ open, onOpenChange, entities, singleEntity
   };
 
   const handleImport = async () => {
-    if (!currentEntity) return;
-    const normalized = previewData.map(row => {
-      const n: any = {};
-      Object.keys(row).forEach(k => { n[k.toLowerCase().trim()] = String(row[k]).trim(); });
-      return n;
-    });
-    const res = await currentEntity.onImport(normalized);
-    setResult(res);
-    setStep('result');
-    if (res.success > 0) toast({ title: `✅ ${res.success} ${currentEntity.config.label} importé(s)` });
-    if (res.errors.length > 0) toast({ title: `⚠️ ${res.errors.length} erreur(s)`, variant: 'destructive' });
+    if (!currentEntity || fileRows.length === 0) return;
+    setImporting(true);
+    try {
+      const normalized = fileRows.map(row => {
+        const n: any = {};
+        Object.keys(row).forEach(k => { n[k.toLowerCase().trim()] = String(row[k]).trim(); });
+        return n;
+      });
+      const res = await currentEntity.onImport(normalized);
+      setResult(res);
+      setStep('result');
+      if (res.success > 0) toast({ title: `✅ ${res.success} ${currentEntity.config.label} importé(s)` });
+      if (res.errors.length > 0) toast({ title: `⚠️ ${res.errors.length} erreur(s)`, variant: 'destructive' });
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleDownloadTemplate = () => {
@@ -150,9 +157,9 @@ export default function ImportExcel({ open, onOpenChange, entities, singleEntity
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-foreground">📄 {fileName}</p>
-                <p className="text-xs text-muted-foreground">{previewData.length} ligne(s) — {currentEntity?.config.label}</p>
+                <p className="text-xs text-muted-foreground">{fileRows.length} ligne(s) — {currentEntity?.config.label}</p>
               </div>
-              <Badge variant="secondary">{previewData.length} lignes</Badge>
+              <Badge variant="secondary">{fileRows.length} lignes</Badge>
             </div>
             <div className="border border-border rounded-lg overflow-x-auto max-h-64">
               <Table>
@@ -163,7 +170,7 @@ export default function ImportExcel({ open, onOpenChange, entities, singleEntity
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {previewData.slice(0, 10).map((row, i) => (
+                  {fileRows.slice(0, 10).map((row, i) => (
                     <TableRow key={i}>
                       <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
                       {previewHeaders.map(h => <TableCell key={h} className="text-xs">{String(row[Object.keys(row).find(k => k.toLowerCase().trim() === h) || ''] || '')}</TableCell>)}
@@ -172,7 +179,7 @@ export default function ImportExcel({ open, onOpenChange, entities, singleEntity
                 </TableBody>
               </Table>
             </div>
-            {previewData.length > 10 && <p className="text-xs text-muted-foreground text-center">... et {previewData.length - 10} autres lignes</p>}
+            {fileRows.length > 10 && <p className="text-xs text-muted-foreground text-center">... et {fileRows.length - 10} autres lignes</p>}
           </div>
         )}
 
@@ -209,8 +216,11 @@ export default function ImportExcel({ open, onOpenChange, entities, singleEntity
           {step === 'select' && <Button variant="outline" onClick={() => handleClose(false)} className="rounded-lg">Fermer</Button>}
           {step === 'preview' && (
             <>
-              <Button variant="outline" onClick={reset} className="rounded-lg">Retour</Button>
-              <Button onClick={handleImport} className="rounded-lg bg-primary text-primary-foreground gap-2"><Upload className="w-4 h-4" />Importer {previewData.length} ligne(s)</Button>
+              <Button variant="outline" onClick={reset} className="rounded-lg" disabled={importing}>Retour</Button>
+              <Button onClick={handleImport} disabled={importing} className="rounded-lg bg-primary text-primary-foreground gap-2">
+                {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {importing ? 'Import en cours…' : `Importer ${fileRows.length} ligne(s)`}
+              </Button>
             </>
           )}
           {step === 'result' && (

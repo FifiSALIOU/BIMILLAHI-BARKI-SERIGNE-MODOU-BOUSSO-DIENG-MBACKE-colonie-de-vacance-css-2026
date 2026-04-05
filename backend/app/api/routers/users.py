@@ -4,7 +4,7 @@ import secrets
 import string
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -52,6 +52,59 @@ def _public_parent_telephone(value: str | None) -> str | None:
     return v
 
 
+def _send_admin_credentials_email(contact: str, temp_password: str) -> None:
+    """Appelé en tâche de fond pour ne pas bloquer la réponse HTTP sur le SMTP."""
+    send_email(
+        to=[contact],
+        subject="Colonie 2026 — Vos identifiants temporaires",
+        body=(
+            "Bonjour,\n\n"
+            f"Votre compte administrateur a été créé.\n"
+            f"- Identifiant (e-mail): {contact}\n"
+            f"- Mot de passe temporaire: {temp_password}\n\n"
+            "Connectez-vous avec cette adresse e-mail et ce mot de passe sur :\n"
+            "http://localhost:8080\n\n"
+            "À la première connexion, vous serez obligé de changer ce mot de passe.\n"
+            "Cordialement.\n"
+        ),
+        html_body=(
+            "<p>Bonjour,</p>"
+            f"<p>Votre compte administrateur a été créé.<br>"
+            f"- Identifiant (e-mail): {contact}<br>"
+            f"- Mot de passe temporaire: {temp_password}</p>"
+            '<p>Veuillez vous connecter à l\'application avec votre e-mail et ce mot de passe : '
+            '<a href="http://localhost:8080/?force_login=1">Accéder à l\'application</a>.</p>'
+            "<p>À la première connexion, vous serez obligé de changer ce mot de passe.<br>"
+            "Cordialement.</p>"
+        ),
+    )
+
+
+def _send_admin_password_reset_email(contact: str, temp_password: str) -> None:
+    send_email(
+        to=[contact],
+        subject="Colonie 2026 — Réinitialisation de votre mot de passe",
+        body=(
+            "Bonjour,\n\n"
+            "Votre mot de passe administrateur a été réinitialisé.\n"
+            f"- Email: {contact}\n"
+            f"- Mot de passe temporaire: {temp_password}\n\n"
+            "Connexion: http://localhost:8080\n\n"
+            "À la prochaine connexion, vous serez obligé de changer ce mot de passe.\n"
+            "Cordialement.\n"
+        ),
+        html_body=(
+            "<p>Bonjour,</p>"
+            "<p>Votre mot de passe administrateur a été réinitialisé.<br>"
+            f"- Email: {contact}<br>"
+            f"- Mot de passe temporaire: {temp_password}</p>"
+            '<p><a href="http://localhost:8080/?force_login=1">Accéder à l\'application</a>.</p>'
+            "<p>À la prochaine connexion, vous serez obligé de changer ce mot de passe.<br>"
+            "Cordialement.</p>"
+        ),
+    )
+
+
 def build_user_out(u: User) -> UserOut:
     email = _admin_contact_email(u)
     parent_prenom = parent_nom = parent_service = parent_site_code = parent_telephone = None
@@ -91,6 +144,7 @@ def list_users(
 @router.post("", response_model=UserOut)
 def create_user(
     payload: dict[str, Any],
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
 ):
@@ -150,30 +204,7 @@ def create_user(
     db.refresh(user)
     contact = _admin_contact_email(user)
     if contact:
-        send_email(
-            to=[contact],
-            subject="Colonie 2026 — Vos identifiants temporaires",
-            body=(
-                "Bonjour,\n\n"
-                f"Votre compte administrateur a été créé.\n"
-                f"- Identifiant (e-mail): {contact}\n"
-                f"- Mot de passe temporaire: {temp_password}\n\n"
-                "Connectez-vous avec cette adresse e-mail et ce mot de passe sur :\n"
-                "http://localhost:8080\n\n"
-                "À la première connexion, vous serez obligé de changer ce mot de passe.\n"
-                "Cordialement.\n"
-            ),
-            html_body=(
-                "<p>Bonjour,</p>"
-                f"<p>Votre compte administrateur a été créé.<br>"
-                f"- Identifiant (e-mail): {contact}<br>"
-                f"- Mot de passe temporaire: {temp_password}</p>"
-                '<p>Veuillez vous connecter à l\'application avec votre e-mail et ce mot de passe : '
-                '<a href="http://localhost:8080/?force_login=1">Accéder à l\'application</a>.</p>'
-                "<p>À la première connexion, vous serez obligé de changer ce mot de passe.<br>"
-                "Cordialement.</p>"
-            ),
-        )
+        background_tasks.add_task(_send_admin_credentials_email, contact, temp_password)
     return build_user_out(user)
 
 
@@ -242,6 +273,7 @@ def reset_password_user(
 @router.post("/{user_id}/reset-password-auto")
 def reset_password_user_auto(
     user_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
 ):
@@ -252,26 +284,5 @@ def reset_password_user_auto(
     db.refresh(user)
     contact = _admin_contact_email(user)
     if contact:
-        send_email(
-            to=[contact],
-            subject="Colonie 2026 — Réinitialisation de votre mot de passe",
-            body=(
-                "Bonjour,\n\n"
-                "Votre mot de passe administrateur a été réinitialisé.\n"
-                f"- Email: {contact}\n"
-                f"- Mot de passe temporaire: {temp_password}\n\n"
-                "Connexion: http://localhost:8080\n\n"
-                "À la prochaine connexion, vous serez obligé de changer ce mot de passe.\n"
-                "Cordialement.\n"
-            ),
-            html_body=(
-                "<p>Bonjour,</p>"
-                "<p>Votre mot de passe administrateur a été réinitialisé.<br>"
-                f"- Email: {contact}<br>"
-                f"- Mot de passe temporaire: {temp_password}</p>"
-                '<p><a href="http://localhost:8080/?force_login=1">Accéder à l\'application</a>.</p>'
-                "<p>À la prochaine connexion, vous serez obligé de changer ce mot de passe.<br>"
-                "Cordialement.</p>"
-            ),
-        )
+        background_tasks.add_task(_send_admin_password_reset_email, contact, temp_password)
     return {"ok": True}
