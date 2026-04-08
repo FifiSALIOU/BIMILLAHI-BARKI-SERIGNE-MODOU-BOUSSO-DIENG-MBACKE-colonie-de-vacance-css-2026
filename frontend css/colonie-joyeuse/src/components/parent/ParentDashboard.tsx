@@ -124,7 +124,19 @@ export default function ParentDashboard() {
   const titulaire = enfants.find(e => e.statut === 'Titulaire');
   const suppN1 = enfants.find(e => e.statut === 'Suppléant N1');
   const suppN2 = enfants.find(e => e.statut === 'Suppléant N2');
-  const enfantsRetenus = enfants.filter(e => e.isSelectionFinale);
+
+  /** Identifiants de demandes réellement dans la liste finale publiée (après clôture) — pas la simple validation des infos. */
+  const demandeIdsListeFinaleRetenus = useMemo(() => {
+    const ids = new Set<number>();
+    for (const row of listeFinaleApiEnfants) {
+      if (typeof row.demandeId === 'number') ids.add(row.demandeId);
+    }
+    return ids;
+  }, [listeFinaleApiEnfants]);
+
+  const enfantsRetenusListeFinale = listeFinaleApiPubliee
+    ? enfants.filter((e) => typeof e.demandeId === 'number' && demandeIdsListeFinaleRetenus.has(e.demandeId))
+    : [];
 
   const enfantN1 = enfants.find(e => e.statut === 'Suppléant N1' && !e.desistement);
 
@@ -239,7 +251,11 @@ export default function ParentDashboard() {
     }
   };
 
-  const isInFinale = (id: string) => enfants.find((e) => e.id === id)?.isSelectionFinale ?? false;
+  const isInFinale = (id: string) => {
+    if (!listeFinaleApiPubliee) return false;
+    const e = enfants.find((x) => x.id === id);
+    return typeof e?.demandeId === 'number' && demandeIdsListeFinaleRetenus.has(e.demandeId);
+  };
 
   const getRangDansListeLocal = (id: string) => {
     const e = enfants.find((x) => x.id === id);
@@ -405,8 +421,8 @@ export default function ParentDashboard() {
         </motion.div>
       )}
 
-      {/* Notification si enfant retenu */}
-      {enfantsRetenus.length > 0 && (
+      {/* Liste finale publiée : enfants effectivement retenus (calcul automatique après clôture) */}
+      {enfantsRetenusListeFinale.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
             <Award className="w-6 h-6 text-emerald-600" />
@@ -414,9 +430,9 @@ export default function ParentDashboard() {
           <div>
             <h3 className="font-semibold text-emerald-800">🎉 Bonne nouvelle !</h3>
             <p className="text-sm text-emerald-700 mt-1">
-              {enfantsRetenus.length === 1
-                ? `Votre enfant ${enfantsRetenus[0].prenom} ${enfantsRetenus[0].nom} a été retenu(e) pour la Colonie de Vacances 2026 !`
-                : `Vos enfants ${enfantsRetenus.map(e => `${e.prenom} ${e.nom}`).join(' et ')} ont été retenus pour la Colonie de Vacances 2026 !`}
+              {enfantsRetenusListeFinale.length === 1
+                ? `Votre enfant ${enfantsRetenusListeFinale[0].prenom} ${enfantsRetenusListeFinale[0].nom} figure dans la liste finale des retenus pour la Colonie de Vacances 2026.`
+                : `Vos enfants ${enfantsRetenusListeFinale.map(e => `${e.prenom} ${e.nom}`).join(' et ')} figurent dans la liste finale des retenus pour la Colonie de Vacances 2026.`}
             </p>
           </div>
         </motion.div>

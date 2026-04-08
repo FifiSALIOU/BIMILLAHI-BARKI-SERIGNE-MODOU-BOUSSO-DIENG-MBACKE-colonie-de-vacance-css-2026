@@ -28,20 +28,14 @@ from app.services.inscriptions import (
 from app.services.users import TELEPHONE_DEJA_UTILISE_DETAIL
 from app.services.email import send_email, uniq_emails
 from app.services.notify_helpers import collect_admin_emails
-from app.services.runtime_settings_store import read_settings
+from app.services.liste_finale_compute import demandes_liste_finale_retenus_si_cloturees
 from app.services.email_templates import (
     body_desistement_cancelled_admin,
-    body_desistement_cancelled_parent,
-    body_desistement_requested,
     body_desistement_requested_admin,
-    body_inscription,
     body_inscription_admin_notify,
     body_titulaire,
     subject_desistement_annule_admin,
-    subject_desistement_annule_parent,
-    subject_desistement,
     subject_desistement_admin,
-    subject_inscription,
     subject_inscription_admin_notify,
     subject_titulaire,
 )
@@ -86,23 +80,9 @@ def creer_inscription(
     db.refresh(demande)
     out = _to_demande_out(db, demande)
 
-    parent = db.query(Parent).filter(Parent.user_id == user.id).first()
-    parent_email = parent.email if parent else None
     admin_emails = collect_admin_emails(db)
 
     enfant_label = f"{payload.enfant.prenom} {payload.enfant.nom}"
-    subject_parent = subject_inscription(payload.parent.matricule, enfant_label)
-    body_parent = body_inscription(
-        parent_matricule=payload.parent.matricule,
-        enfant_prenom=payload.enfant.prenom,
-        enfant_nom=payload.enfant.nom,
-        liste=out.liste_code,
-        rang=out.rang_dans_liste,
-        date=out.date_inscription,
-    )
-    to_parent = uniq_emails([parent_email])
-    if to_parent:
-        background.add_task(send_email, to=to_parent, subject=subject_parent, body=body_parent)
 
     to_admins = uniq_emails(admin_emails)
     if to_admins:
@@ -148,19 +128,6 @@ _LISTE_ORDRE: dict[ListeCode, int] = {
 }
 
 
-def _inscriptions_cloturees() -> bool:
-    """True uniquement après la fin de la journée de dateFinInscriptions (comme le front admin)."""
-    fin = read_settings().get("dateFinInscriptions")
-    if fin is None or fin == "":
-        return False
-    try:
-        date_part = str(fin).split("T")[0]
-        end_local = datetime.fromisoformat(f"{date_part}T23:59:59")
-    except (ValueError, OSError):
-        return False
-    return datetime.now() > end_local
-
-
 @router.get("/liste-finale")
 def liste_finale_globale_parent(
     db: Session = Depends(get_db),
@@ -169,40 +136,9 @@ def liste_finale_globale_parent(
     """Liste finale globale (lecture seule), publiée seulement après clôture des inscriptions."""
     _ = user
     ensure_listes_exist(db)
-
-    if not _inscriptions_cloturees():
+    ordered = demandes_liste_finale_retenus_si_cloturees(db)
+    if ordered is None:
         return {"disponible": False, "retenus": []}
-
-    raw_settings = read_settings()
-    capacite_max = raw_settings.get("capaciteMax", 100)
-    try:
-        capacite_max = None if capacite_max is None else max(int(capacite_max), 0)
-    except Exception:
-        capacite_max = 100
-
-    demandes = (
-        db.query(DemandeInscription)
-        .options(
-            joinedload(DemandeInscription.enfant).joinedload(Enfant.parent),
-            joinedload(DemandeInscription.liste),
-        )
-        .filter(DemandeInscription.statut != DemandeStatut.NON_VALIDEE)
-        .filter(DemandeInscription.statut != DemandeStatut.DESISTEE)
-        .all()
-    )
-
-    # Priorité liste (P → N1 → N2), puis rang officiel dans la liste (comme l’admin), pas la date :
-    # la date peut changer (transfert, réinscription) sans refléter l’ordre d’arrivée affiché.
-    def _order(d: DemandeInscription) -> tuple[int, int, int]:
-        return (
-            _LISTE_ORDRE.get(d.liste.code, 99),
-            d.rang_dans_liste,
-            d.id,
-        )
-
-    ordered = sorted(demandes, key=_order)
-    if capacite_max is not None:
-        ordered = ordered[:capacite_max]
 
     out = []
     for idx, d in enumerate(ordered, start=1):
@@ -316,13 +252,14 @@ def definir_titulaire(
 
     if parent and new:
         admin_emails = collect_admin_emails(db)
-        to = uniq_emails(([parent.email] if parent.email else []) + admin_emails)
-        background.add_task(
-            send_email,
-            to=to,
-            subject=subject_titulaire(parent.matricule),
-            body=body_titulaire(parent_matricule=parent.matricule, new_titulaire=new, old_titulaire=old),
-        )
+        to = uniq_emails(admin_emails)
+        if to:
+            background.add_task(
+                send_email,
+                to=to,
+                subject=subject_titulaire(parent.matricule),
+                body=body_titulaire(parent_matricule=parent.matricule, new_titulaire=new, old_titulaire=old),
+            )
     return {"ok": True}
 
 
@@ -352,18 +289,6 @@ def demander_desistement(
     if parent and enfant_label:
         admin_emails = collect_admin_emails(db)
         now = datetime.now(timezone.utc)
-        if parent.email:
-            background.add_task(
-                send_email,
-                to=uniq_emails([parent.email]),
-                subject=subject_desistement(parent.matricule, enfant_label),
-                body=body_desistement_requested(
-                    parent_matricule=parent.matricule,
-                    enfant=enfant_label,
-                    when=now,
-                    reason=payload.reason,
-                ),
-            )
         to_admins = uniq_emails(admin_emails)
         if to_admins:
             background.add_task(
@@ -405,17 +330,6 @@ def annuler_desistement(
     if parent and enfant_label:
         admin_emails = collect_admin_emails(db)
         now = datetime.now(timezone.utc)
-        if parent.email:
-            background.add_task(
-                send_email,
-                to=uniq_emails([parent.email]),
-                subject=subject_desistement_annule_parent(parent.matricule, enfant_label),
-                body=body_desistement_cancelled_parent(
-                    parent_matricule=parent.matricule,
-                    enfant=enfant_label,
-                    when=now,
-                ),
-            )
         to_admins = uniq_emails(admin_emails)
         if to_admins:
             background.add_task(

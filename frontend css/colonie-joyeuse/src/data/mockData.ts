@@ -35,7 +35,8 @@ export interface Enfant {
   demandeId?: number;
   enfantDbId?: number;
   rangListe?: number;
-  isSelectionFinale?: boolean;
+  /** True si le gestionnaire a validé la conformité des informations (statut RETENUE) — indépendant de la liste finale. */
+  informationsValideesParAdmin?: boolean;
 }
 
 export interface Inscription {

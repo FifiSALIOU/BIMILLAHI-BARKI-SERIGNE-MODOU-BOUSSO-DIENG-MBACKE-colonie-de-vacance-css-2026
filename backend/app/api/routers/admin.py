@@ -14,16 +14,15 @@ from app.models.enums import DemandeStatut, ListeCode, UserRole
 from app.models.models import DemandeInscription, Desistement, Enfant, Liste, Parent, Service, Site, User
 from app.services.email import send_email, uniq_emails
 from app.services.email_templates import (
-    body_desistement_validated,
     body_desistement_validated_admin,
     body_selection,
     body_transfer,
     subject_desistement_valide_admin,
-    subject_desistement_valide_parent,
     subject_selection,
     subject_transfer,
 )
 from app.services.inscriptions import ensure_listes_exist
+from app.services.liste_finale_compute import demandes_liste_finale_retenus_si_cloturees
 from app.services.notify_helpers import collect_admin_emails
 from app.services.runtime_settings_store import merge_with_defaults, read_settings, write_settings
 
@@ -412,6 +411,7 @@ def set_selection_finale(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.GESTIONNAIRE, UserRole.SUPER_ADMIN)),
 ):
+    """Validation ou refus des informations de la demande (RETENUE / NON_VALIDEE). Ne remplace pas la liste finale automatique après clôture."""
     demande = db.query(DemandeInscription).filter(DemandeInscription.id == demande_id).first()
     if not demande:
         raise HTTPException(status_code=404, detail="Demande introuvable.")
@@ -435,20 +435,20 @@ def set_selection_finale(
 
     enfant = demande.enfant
     parent = enfant.parent
-    parent_email = parent.email
     admin_emails = collect_admin_emails(db)
-    to = uniq_emails(([parent_email] if parent_email else []) + admin_emails)
-    background.add_task(
-        send_email,
-        to=to,
-        subject=subject_selection(parent.matricule, f"{enfant.prenom} {enfant.nom}"),
-        body=body_selection(
-            parent_matricule=parent.matricule,
-            enfant=f"{enfant.prenom} {enfant.nom}",
-            selected=payload.is_selection_finale,
-            when=when,
-        ),
-    )
+    to = uniq_emails(admin_emails)
+    if to:
+        background.add_task(
+            send_email,
+            to=to,
+            subject=subject_selection(parent.matricule, f"{enfant.prenom} {enfant.nom}"),
+            body=body_selection(
+                parent_matricule=parent.matricule,
+                enfant=f"{enfant.prenom} {enfant.nom}",
+                selected=payload.is_selection_finale,
+                when=when,
+            ),
+        )
     return {"ok": True}
 
 
@@ -518,23 +518,24 @@ def transferer_demande(
 
     parent = enfant.parent
     admin_emails = collect_admin_emails(db)
-    to = uniq_emails(([parent.email] if parent.email else []) + admin_emails)
+    to = uniq_emails(admin_emails)
     when = datetime.now(timezone.utc)
-    background.add_task(
-        send_email,
-        to=to,
-        subject=subject_transfer(parent.matricule, f"{enfant.prenom} {enfant.nom}"),
-        body=body_transfer(
-            parent_matricule=parent.matricule,
-            enfant=f"{enfant.prenom} {enfant.nom}",
-            from_liste=from_liste.code.value if from_liste else "",
-            from_rang=from_display_rank if from_display_rank is not None else from_rang,
-            to_liste=to_liste.code.value,
-            to_rang=to_display_rank if to_display_rank is not None else new_rang,
-            reason=payload.reason,
-            when=when,
-        ),
-    )
+    if to:
+        background.add_task(
+            send_email,
+            to=to,
+            subject=subject_transfer(parent.matricule, f"{enfant.prenom} {enfant.nom}"),
+            body=body_transfer(
+                parent_matricule=parent.matricule,
+                enfant=f"{enfant.prenom} {enfant.nom}",
+                from_liste=from_liste.code.value if from_liste else "",
+                from_rang=from_display_rank if from_display_rank is not None else from_rang,
+                to_liste=to_liste.code.value,
+                to_rang=to_display_rank if to_display_rank is not None else new_rang,
+                reason=payload.reason,
+                when=when,
+            ),
+        )
     return {"ok": True, "to_liste": to_liste.code.value, "new_rang": new_rang}
 
 
@@ -551,20 +552,16 @@ def stats_summary(
     total_enfants = db.query(func.count(Enfant.id)).scalar() or 0
     total_demandes = db.query(func.count(DemandeInscription.id)).scalar() or 0
 
-    selected_total = (
-        db.query(func.count(DemandeInscription.id))
-        .filter(DemandeInscription.statut == DemandeStatut.RETENUE)
-        .scalar()
-        or 0
-    )
-
-    by_liste = (
-        db.query(Liste.code, func.count(DemandeInscription.id))
-        .filter(DemandeInscription.statut == DemandeStatut.RETENUE)
-        .group_by(Liste.code)
-        .all()
-    )
-    by_liste_map = {code.value: int(cnt) for code, cnt in by_liste}
+    liste_finale_ordered = demandes_liste_finale_retenus_si_cloturees(db)
+    if liste_finale_ordered is None:
+        selected_total = 0
+        by_liste_map: dict[str, int] = {}
+    else:
+        selected_total = len(liste_finale_ordered)
+        by_liste_map = {}
+        for d in liste_finale_ordered:
+            k = d.liste.code.value
+            by_liste_map[k] = by_liste_map.get(k, 0) + 1
 
     desistements_waiting = db.query(func.count(Desistement.id)).scalar() or 0
 
@@ -837,17 +834,6 @@ def valider_desistement(
 
     admin_emails = collect_admin_emails(db)
     enfant_label = f"{enfant.prenom} {enfant.nom}"
-    if parent.email:
-        background.add_task(
-            send_email,
-            to=uniq_emails([parent.email]),
-            subject=subject_desistement_valide_parent(parent.matricule, enfant_label),
-            body=body_desistement_validated(
-                parent_matricule=parent.matricule,
-                enfant=enfant_label,
-                when=validated_at,
-            ),
-        )
     to_admins = uniq_emails(admin_emails)
     if to_admins:
         background.add_task(

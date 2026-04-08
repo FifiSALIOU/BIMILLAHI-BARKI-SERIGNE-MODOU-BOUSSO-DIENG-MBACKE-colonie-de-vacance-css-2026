@@ -71,17 +71,29 @@ def body_titulaire(*, parent_matricule: str, new_titulaire: str, old_titulaire: 
 
 
 def subject_selection(parent_matricule: str, enfant_nom: str) -> str:
-    return f"Colonie 2026 — Mise à jour sélection finale ({parent_matricule}) — {enfant_nom}"
+    return f"Colonie 2026 — Validation des informations ({parent_matricule}) — {enfant_nom}"
 
 
 def body_selection(*, parent_matricule: str, enfant: str, selected: bool, when: datetime):
+    """Courriel après « Approuver » / « Refuser » côté gestionnaire : contrôle de conformité des infos, pas la liste finale."""
+    if selected:
+        suite = (
+            "Les informations de cette demande ont été contrôlées et jugées conformes par l’administration.\n"
+            "Cela ne signifie pas que l’enfant figure dans la liste finale des retenus : celle-ci est établie automatiquement après la clôture des inscriptions.\n"
+        )
+    else:
+        suite = (
+            "Les informations de cette demande n’ont pas été jugées conformes par l’administration.\n"
+            "Un motif a été enregistré. Si la demande est transférée vers une autre liste, vous recevrez aussi un e-mail de transfert.\n"
+        )
     return (
         "Bonjour,\n\n"
-        "Mise à jour de la sélection finale.\n\n"
+        "Mise à jour concernant le contrôle des informations de votre demande d’inscription.\n\n"
         f"- Matricule: {parent_matricule}\n"
         f"- Enfant: {enfant}\n"
-        f"- Statut: {'VALIDÉ (partant)' if selected else 'REFUSÉ (non partant)'}\n"
+        f"- Décision: {'informations conformes' if selected else 'informations non conformes'}\n"
         f"- Date: {_dt(when)}\n\n"
+        f"{suite}\n"
         "Cordialement.\n"
     )
 

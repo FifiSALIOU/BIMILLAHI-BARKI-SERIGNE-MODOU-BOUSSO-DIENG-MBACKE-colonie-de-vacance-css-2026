@@ -65,7 +65,13 @@ class DemandeOut(BaseModel):
     updated_at: Optional[datetime] = None
     statut: str
     non_validation_reason: Optional[str] = None
-    is_selection_finale: bool
+    is_selection_finale: bool = Field(
+        ...,
+        description=(
+            "True si le gestionnaire a validé la conformité des informations (statut RETENUE). "
+            "Ne indique pas que l'enfant est dans la liste finale des retenus (calculée après clôture)."
+        ),
+    )
     has_desistement_pending: bool = False
     is_reinscrit: bool = False
     date_desistement: Optional[datetime] = Field(

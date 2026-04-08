@@ -9,6 +9,7 @@ export type DemandeOutApi = {
   updated_at?: string | null;
   statut: string;
   non_validation_reason?: string | null;
+  /** Aligné sur statut RETENUE : validation des infos par l’admin, pas « retenu liste finale ». */
   is_selection_finale: boolean;
   has_desistement_pending: boolean;
   is_reinscrit: boolean;
@@ -134,7 +135,7 @@ export function mapDemandeOutToEnfant(d: DemandeOutApi, parentMatricule: string)
     enfantDbId: d.enfant_id,
     rangListe: d.rang_dans_liste,
     updatedAt,
-    isSelectionFinale: !!d.is_selection_finale,
+    informationsValideesParAdmin: !!d.is_selection_finale,
     parentMatricule,
     prenom: d.enfant_prenom,
     nom: d.enfant_nom,
