@@ -31,13 +31,14 @@ from app.services.notify_helpers import collect_admin_emails
 from app.services.liste_finale_compute import demandes_liste_finale_retenus_si_cloturees
 from app.services.email_templates import (
     body_desistement_cancelled_admin,
-    body_desistement_requested_admin,
+    body_desistement_validated_admin,
     body_inscription_admin_notify,
     body_titulaire,
     subject_desistement_annule_admin,
-    subject_desistement_admin,
+    subject_desistement_valide_admin,
     subject_inscription_admin_notify,
     subject_titulaire,
+    # Anciennement pour un désistement « en attente » : subject_desistement_admin, body_desistement_requested_admin.
 )
 
 router = APIRouter(prefix="/parent", tags=["parent"])
@@ -291,16 +292,21 @@ def demander_desistement(
         now = datetime.now(timezone.utc)
         to_admins = uniq_emails(admin_emails)
         if to_admins:
+            # Ancien envoi (désistement à traiter) : subject_desistement_admin(...),
+            # body_desistement_requested_admin(..., reason=payload.reason).
+            body_mail = body_desistement_validated_admin(
+                parent_matricule=parent.matricule,
+                enfant=enfant_label,
+                when=now,
+            )
+            reason = (payload.reason or "").strip()
+            if reason:
+                body_mail = body_mail.rstrip() + f"\n\nMotif indiqué par le parent : {reason}\n"
             background.add_task(
                 send_email,
                 to=to_admins,
-                subject=subject_desistement_admin(parent.matricule, enfant_label),
-                body=body_desistement_requested_admin(
-                    parent_matricule=parent.matricule,
-                    enfant=enfant_label,
-                    when=now,
-                    reason=payload.reason,
-                ),
+                subject=subject_desistement_valide_admin(parent.matricule, enfant_label),
+                body=body_mail,
             )
     return {"ok": True}
 

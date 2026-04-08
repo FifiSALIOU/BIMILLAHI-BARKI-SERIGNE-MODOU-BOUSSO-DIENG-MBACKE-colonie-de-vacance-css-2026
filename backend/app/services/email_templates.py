@@ -186,13 +186,15 @@ def body_desistement_validated(*, parent_matricule: str, enfant: str, when: date
 
 
 def body_desistement_validated_admin(*, parent_matricule: str, enfant: str, when: datetime):
+    # Ancien libellé (référence) : « validé depuis l’espace gestionnaire », « liste finale »,
+    # « Date de validation » — harmonisé pour couvrir aussi le désistement immédiat depuis l’espace parent.
     return (
         "Bonjour,\n\n"
-        "Un désistement a été validé depuis l’espace gestionnaire. "
-        "L’enfant concerné ne fait plus partie de la liste finale pour la Colonie 2026.\n\n"
+        "Un désistement a été enregistré pour la Colonie 2026. "
+        "L’enfant concerné ne fait plus partie de la liste active.\n\n"
         f"- Matricule parent: {parent_matricule}\n"
         f"- Enfant concerné: {enfant}\n"
-        f"- Date de validation: {_dt(when)}\n\n"
+        f"- Date: {_dt(when)}\n\n"
         "Cordialement.\n"
     )
 

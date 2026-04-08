@@ -194,7 +194,13 @@ export default function ParentDashboard() {
         body: JSON.stringify({ reason: null }),
       });
       await loadAll();
-      addHistorique({ utilisateur: `${parent.prenom} ${parent.nom}`, role: 'Parent', action: 'Désistement demandé', details: `A demandé le désistement de ${desistementName}`, cible: desistementName });
+      addHistorique({
+        utilisateur: `${parent.prenom} ${parent.nom}`,
+        role: 'Parent',
+        action: 'Désistement enregistré',
+        details: `A confirmé le désistement de ${desistementName} (effectif immédiatement).`,
+        cible: desistementName,
+      });
     } catch (err) {
       console.error(err);
     }

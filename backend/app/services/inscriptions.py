@@ -348,6 +348,12 @@ def set_titulaire(*, db: Session, user: User, enfant_id_titulaire: int) -> None:
 
 
 def request_desistement(*, db: Session, user: User, demande_id: int, reason: str | None) -> None:
+    # Ancien flux (conservé en mémoire lecture seule) : création d’une ligne `Desistement` en attente,
+    # puis validation ultérieure par le gestionnaire. Désormais le désistement parent est appliqué tout de suite
+    # (statut DESISTEE + renumérotation) ; `reason` est transmis à l’e-mail admin depuis le routeur parent.
+    # from app.models.models import Desistement
+    # d = Desistement(demande_inscription_id=demande.id, user_id=user.id, raison=(reason or "")[:191])
+    # db.add(d); db.flush()
     parent = db.query(Parent).filter(Parent.user_id == user.id).first()
     if not parent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parent introuvable.")
@@ -360,18 +366,15 @@ def request_desistement(*, db: Session, user: User, demande_id: int, reason: str
     )
     if not demande:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande introuvable.")
+    if demande.statut == DemandeStatut.DESISTEE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cette demande est déjà désistée.")
     if demande.desistement is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Désistement déjà demandé.")
 
-    from app.models.models import Desistement
-
-    d = Desistement(
-        demande_inscription_id=demande.id,
-        user_id=user.id,
-        raison=(reason or "")[:191],
-    )
-    db.add(d)
+    demande.statut = DemandeStatut.DESISTEE
+    demande.updated_at = datetime.now(timezone.utc)
     db.flush()
+    resequence_rangs_apres_desistement_valide(db, int(demande.liste_id))
 
 
 def cancel_desistement(*, db: Session, user: User, demande_id: int) -> None:
