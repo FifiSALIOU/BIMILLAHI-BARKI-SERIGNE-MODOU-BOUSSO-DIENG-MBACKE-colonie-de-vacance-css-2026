@@ -103,6 +103,39 @@ def resequence_rangs_pour_liste(db: Session, liste_id: int, *, demande_reinscrit
     db.flush()
 
 
+def resequence_rangs_apres_desistement_valide(db: Session, liste_id: int) -> None:
+    """
+    Après validation gestionnaire d’un désistement : mêmes règles que `resequence_rangs_pour_liste`
+    sans ligne réinscrite — actifs (non DESISTEE) en 1..n dans l’ordre (rang, id), puis désistés.
+    """
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": int(liste_id)})
+    rows = (
+        db.query(DemandeInscription)
+        .filter(DemandeInscription.liste_id == liste_id)
+        .order_by(DemandeInscription.id.asc())
+        .all()
+    )
+    if not rows:
+        return
+    active = [d for d in rows if d.statut != DemandeStatut.DESISTEE]
+    desistees = [d for d in rows if d.statut == DemandeStatut.DESISTEE]
+    active_sorted = sorted(active, key=lambda d: (d.rang_dans_liste, d.id))
+    desist_sorted = sorted(desistees, key=lambda d: (d.rang_dans_liste, d.id))
+    temp = -1
+    for d in rows:
+        d.rang_dans_liste = temp
+        temp -= 1
+    db.flush()
+    r = 1
+    for d in active_sorted:
+        d.rang_dans_liste = r
+        r += 1
+    for d in desist_sorted:
+        d.rang_dans_liste = r
+        r += 1
+    db.flush()
+
+
 def _get_max_enfants_par_parent(db: Session) -> int:
     _ = db
     return get_max_enfants_par_parent(DEFAULT_MAX_ENFANTS_PAR_PARENT)
