@@ -141,6 +141,7 @@ export default function GestionListe({ type }: Props) {
         parentNom: d.parent_nom,
         parentPrenom: d.parent_prenom,
         parentService: d.parent_service,
+        parentTelephone: d.parent_telephone || undefined,
         parentAgence: d.parent_site || '',
         rang: d.rang || 0,
         reinscrit: !!d.is_reinscrit,

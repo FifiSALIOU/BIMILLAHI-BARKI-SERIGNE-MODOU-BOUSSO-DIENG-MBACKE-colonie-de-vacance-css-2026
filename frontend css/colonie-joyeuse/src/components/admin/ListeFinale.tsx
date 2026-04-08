@@ -133,6 +133,7 @@ export default function ListeFinale() {
           parentNom: d.parent_nom,
           parentPrenom: d.parent_prenom,
           parentService: d.parent_service,
+          parentTelephone: d.parent_telephone || undefined,
           parentSite: d.parent_site || d.parent_site_code || '',
         };
         });
