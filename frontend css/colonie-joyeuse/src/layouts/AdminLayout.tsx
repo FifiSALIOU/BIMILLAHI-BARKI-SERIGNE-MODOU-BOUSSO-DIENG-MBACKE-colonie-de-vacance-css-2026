@@ -6,6 +6,7 @@ import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import AdminDashboard from '@/components/admin/AdminDashboard';
 import ListeInscriptions from '@/components/admin/ListeInscriptions';
 import GestionListe from '@/components/admin/GestionListe';
+import ListeDemandesDesistees from '@/components/admin/ListeDemandesDesistees';
 import ListeFinale from '@/components/admin/ListeFinale';
 import Statistiques from '@/components/admin/Statistiques';
 import GestionUtilisateurs from '@/components/admin/GestionUtilisateurs';
@@ -45,6 +46,7 @@ export default function AdminLayout({ initialPage }: Props) {
     liste_principale: '/dashboard/liste/principale',
     liste_n1: '/dashboard/liste/attente-1',
     liste_n2: '/dashboard/liste/attente-2',
+    liste_desistees: '/dashboard/liste/demandes-desistees',
     liste_finale: '/dashboard/liste-finale',
     statistiques: '/dashboard/statistiques',
     historique: '/dashboard/historique',
@@ -69,6 +71,7 @@ export default function AdminLayout({ initialPage }: Props) {
       case 'liste_principale': return <GestionListe type="principale" />;
       case 'liste_n1': return <GestionListe type="attente_n1" />;
       case 'liste_n2': return <GestionListe type="attente_n2" />;
+      case 'liste_desistees': return <ListeDemandesDesistees />;
       case 'liste_finale': return <ListeFinale />;
       case 'statistiques': return <Statistiques />;
       case 'historique': return <Historique />;

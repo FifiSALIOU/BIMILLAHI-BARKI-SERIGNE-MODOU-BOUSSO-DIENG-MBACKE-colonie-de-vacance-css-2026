@@ -30,6 +30,7 @@ const App = () => (
               <Route path="/dashboard/liste/principale" element={<Index page="liste_principale" />} />
               <Route path="/dashboard/liste/attente-1" element={<Index page="liste_n1" />} />
               <Route path="/dashboard/liste/attente-2" element={<Index page="liste_n2" />} />
+              <Route path="/dashboard/liste/demandes-desistees" element={<Index page="liste_desistees" />} />
               <Route path="/dashboard/liste-finale" element={<Index page="liste_finale" />} />
               <Route path="/dashboard/statistiques" element={<Index page="statistiques" />} />
               <Route path="/dashboard/historique" element={<Index page="historique" />} />

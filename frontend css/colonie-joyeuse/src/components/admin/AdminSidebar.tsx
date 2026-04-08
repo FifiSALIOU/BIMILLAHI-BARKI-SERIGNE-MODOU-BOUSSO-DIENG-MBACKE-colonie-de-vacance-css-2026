@@ -17,7 +17,7 @@ interface Props {
 export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const isListeActive = ['liste_principale', 'liste_n1', 'liste_n2'].includes(currentPage);
+  const isListeActive = ['liste_principale', 'liste_n1', 'liste_n2', 'liste_desistees'].includes(currentPage);
 
   return (
     <Sidebar collapsible="icon">
@@ -62,17 +62,26 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
                       <SidebarMenuSub>
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton onClick={() => onNavigate('liste_principale')} isActive={currentPage === 'liste_principale'}>
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2" />Liste Principale
+                            <span className="w-2 h-2 shrink-0 rounded-full bg-emerald-500" />
+                            <span>Liste Principale</span>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton onClick={() => onNavigate('liste_n1')} isActive={currentPage === 'liste_n1'}>
-                            <span className="w-2 h-2 rounded-full bg-accent mr-2" />Liste N°1
+                            <span className="w-2 h-2 shrink-0 rounded-full bg-accent" />
+                            <span>Liste N°1</span>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton onClick={() => onNavigate('liste_n2')} isActive={currentPage === 'liste_n2'}>
-                            <span className="w-2 h-2 rounded-full bg-primary mr-2" />Liste N°2
+                            <span className="w-2 h-2 shrink-0 rounded-full bg-primary" />
+                            <span>Liste N°2</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton onClick={() => onNavigate('liste_desistees')} isActive={currentPage === 'liste_desistees'}>
+                            <span className="w-2 h-2 shrink-0 rounded-full bg-destructive/70" />
+                            <span>Demandes désistées</span>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       </SidebarMenuSub>
