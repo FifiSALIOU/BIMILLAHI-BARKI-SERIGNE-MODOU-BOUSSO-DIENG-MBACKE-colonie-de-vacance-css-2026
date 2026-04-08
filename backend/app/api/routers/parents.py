@@ -191,10 +191,12 @@ def liste_finale_globale_parent(
         .all()
     )
 
-    def _order(d: DemandeInscription) -> tuple[int, date, int]:
+    # Priorité liste (P → N1 → N2), puis rang officiel dans la liste (comme l’admin), pas la date :
+    # la date peut changer (transfert, réinscription) sans refléter l’ordre d’arrivée affiché.
+    def _order(d: DemandeInscription) -> tuple[int, int, int]:
         return (
             _LISTE_ORDRE.get(d.liste.code, 99),
-            d.date_inscription,
+            d.rang_dans_liste,
             d.id,
         )
 

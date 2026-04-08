@@ -27,6 +27,10 @@ type Enfant = {
   liste: 'principale' | 'attente_n1' | 'attente_n2';
   statut: 'Titulaire' | 'Suppléant N1' | 'Suppléant N2';
   dateInscription: string;
+  /** `rang_dans_liste` API — même logique que `GET /parent/liste-finale`. */
+  rangListe: number;
+  demandeStatut?: string;
+  updatedAt?: string | null;
   desistement?: 'demandé' | 'validé' | null;
   dateDesistement?: string;
   reinscrit?: boolean;
@@ -36,6 +40,22 @@ type Enfant = {
   parentTelephone?: string;
   parentSite?: string;
 };
+
+const priorityListe: Record<Enfant['liste'], number> = {
+  principale: 0,
+  attente_n1: 1,
+  attente_n2: 2,
+};
+
+function sortOrdreListeFinale(a: Enfant, b: Enfant): number {
+  const pa = priorityListe[a.liste];
+  const pb = priorityListe[b.liste];
+  if (pa !== pb) return pa - pb;
+  const ra = a.rangListe ?? 0;
+  const rb = b.rangListe ?? 0;
+  if (ra !== rb) return ra - rb;
+  return a.demandeId - b.demandeId;
+}
 
 const calculateAge = (dateNaissance: string): number => {
   const birth = new Date(dateNaissance);
@@ -66,6 +86,8 @@ export default function ListeFinale() {
   const [detailEnfant, setDetailEnfant] = useState<Enfant | null>(null);
   const [confirmDesistOpen, setConfirmDesistOpen] = useState(false);
   const [desistTarget, setDesistTarget] = useState<Enfant | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [validerDesistLoading, setValiderDesistLoading] = useState(false);
 
   const capaciteLabel = settings.capaciteMax !== null ? settings.capaciteMax : '∞';
   const isComplete = settings.capaciteMax !== null ? enfantsRetenus.length >= settings.capaciteMax : false;
@@ -91,6 +113,7 @@ export default function ListeFinale() {
       const mapRows = (list: any[]): Enfant[] =>
         list.map((d: any) => {
           const lu = listeApiToUi(d.liste);
+          const rang = typeof d.rang === 'number' ? d.rang : 0;
           return {
           id: String(d.enfant?.id ?? d.demande_id),
           demandeId: d.demande_id,
@@ -103,29 +126,45 @@ export default function ListeFinale() {
           liste: lu,
           statut: statutLabelFromListeUi(lu),
           dateInscription: d.date_inscription,
+          rangListe: rang,
+          demandeStatut: d.statut || '',
+          updatedAt: d.updated_at ?? null,
+          reinscrit: !!d.is_reinscrit,
           parentNom: d.parent_nom,
           parentPrenom: d.parent_prenom,
           parentService: d.parent_service,
-          parentSite: d.parent_site_code || '',
+          parentSite: d.parent_site || d.parent_site_code || '',
         };
         });
       const all = [...mapRows(p), ...mapRows(n1), ...mapRows(n2)];
-      const priority = { principale: 0, attente_n1: 1, attente_n2: 2 } as const;
-      const ordered = all.sort((a, b) => {
-        const pa = priority[a.liste];
-        const pb = priority[b.liste];
-        if (pa !== pb) return pa - pb;
-        return new Date(a.dateInscription).getTime() - new Date(b.dateInscription).getTime();
-      });
+      const eligibles = all.filter(
+        (e) => e.demandeStatut !== 'NON_VALIDEE' && e.demandeStatut !== 'DESISTEE',
+      );
+      const ordered = [...eligibles].sort(sortOrdreListeFinale);
       const cap = cfg?.capaciteMax;
       const retenus = cap == null ? ordered : ordered.slice(0, cap);
       setEnfantsRetenus(retenus);
-      const pending = desistements.map((x) => ({
-        ...retenus.find((r) => r.demandeId === x.demande_id),
-        desistement: 'demandé' as const,
-        dateDesistement: x.requested_at,
-      })).filter((x) => x.id) as Enfant[];
-      setEnfantsDesistes(pending);
+
+      const pending: Enfant[] = [];
+      for (const x of desistements) {
+        const row = all.find((r) => r.demandeId === x.demande_id);
+        if (row?.id) {
+          pending.push({
+            ...row,
+            desistement: 'demandé',
+            dateDesistement: x.requested_at,
+          });
+        }
+      }
+      const desistesValides = all
+        .filter((e) => e.demandeStatut === 'DESISTEE')
+        .map((e) => ({
+          ...e,
+          desistement: 'validé' as const,
+          dateDesistement: e.updatedAt || e.dateInscription,
+        }));
+      setEnfantsDesistes([...desistesValides, ...pending].sort(sortOrdreListeFinale));
+
       setListeFinaleGeneree(true);
       const idx: Record<number, number> = {};
       desistements.forEach((x) => {
@@ -133,7 +172,7 @@ export default function ListeFinale() {
       });
       setDesistementsByDemande(idx);
     }).catch(() => undefined);
-  }, [token]);
+  }, [token, refreshTick]);
 
   const now = new Date();
   const dateFin = settings.dateFinInscriptions ? new Date(settings.dateFinInscriptions + 'T23:59:59') : null;
@@ -171,17 +210,38 @@ export default function ListeFinale() {
   const filteredRetenus = filterList(enfantsRetenus);
   const filteredDesistes = filterList(enfantsDesistes);
 
-  const handleValiderDesistement = () => {
-    if (!desistTarget) return;
+  const handleValiderDesistement = async () => {
+    if (!desistTarget || validerDesistLoading) return;
     const desistementId = desistementsByDemande[desistTarget.demandeId];
-    if (!desistementId) return;
-    apiRequest(`/admin/desistements/${desistementId}/valider`, {
-      method: 'POST',
-      token,
-      body: JSON.stringify({ validated: true }),
-    }).then(() => undefined);
-    toast({ title: '✅ Désistement validé', description: `${desistTarget.prenom} ${desistTarget.nom} a été retiré(e) de la liste finale. La liste se mettra à jour automatiquement.` });
-    setConfirmDesistOpen(false); setDesistTarget(null);
+    if (!desistementId) {
+      toast({ title: 'Données obsolètes', description: 'Rechargez l’écran.', variant: 'destructive' });
+      return;
+    }
+    setValiderDesistLoading(true);
+    const nom = `${desistTarget.prenom} ${desistTarget.nom}`;
+    try {
+      await apiRequest(`/admin/desistements/${desistementId}/valider`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ validated: true }),
+      });
+      toast({ title: '✅ Désistement validé', description: `${nom} retiré(e) des retenus ; ordre = rang dans chaque liste (P → N1 → N2).` });
+      setConfirmDesistOpen(false);
+      setDesistTarget(null);
+      setRefreshTick((t) => t + 1);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+      if (msg.includes('introuvable')) {
+        toast({ title: 'Déjà traité', description: 'Actualisation…', variant: 'destructive' });
+        setConfirmDesistOpen(false);
+        setDesistTarget(null);
+        setRefreshTick((t) => t + 1);
+      } else {
+        toast({ title: 'Échec', description: msg, variant: 'destructive' });
+      }
+    } finally {
+      setValiderDesistLoading(false);
+    }
   };
 
   const handleGenererListe = () => {
@@ -332,7 +392,7 @@ export default function ListeFinale() {
 
       {/* Info about auto-generation */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-        <strong>ℹ️ Liste automatique :</strong> La liste finale se génère uniquement <strong>après la clôture des inscriptions</strong>, selon la priorité <strong>Liste Principale</strong>, puis <strong>Liste N°1</strong>, puis <strong>Liste N°2</strong>. Les boutons <strong>Approuver</strong> et <strong>Refuser</strong> servent seulement à valider les informations. En cas de désistement validé, la liste se complète automatiquement avec l'enfant suivant selon cet ordre de priorité.
+        <strong>ℹ️ Liste automatique :</strong> Après la <strong>clôture des inscriptions</strong>, l&apos;ordre est : <strong>Liste Principale</strong> (tous les rangs 1, 2…), puis <strong>Liste N°1</strong>, puis <strong>Liste N°2</strong>, en suivant le <strong>rang dans chaque liste</strong> (comme à l&apos;écran « Gestion des listes »), pas la seule date d&apos;inscription — celle-ci peut changer après transfert ou réinscription. Les désistements validés sont exclus ; les places libres sont comblées selon cet ordre jusqu&apos;à la capacité.
       </motion.div>
 
       {!inscriptionsCloturees && (
@@ -458,8 +518,10 @@ export default function ListeFinale() {
             <DialogDescription className="pt-2">Confirmez-vous la validation du désistement de <strong>{desistTarget?.prenom} {desistTarget?.nom}</strong> ?<br /><br />Cet enfant sera retiré de la liste finale. La place sera automatiquement attribuée à l'enfant suivant selon l'ordre de priorité (Principale → N1 → N2).</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDesistOpen(false)} className="rounded-lg">Annuler</Button>
-            <Button onClick={handleValiderDesistement} className="rounded-lg bg-accent text-white hover:bg-accent/90">Valider le désistement</Button>
+            <Button variant="outline" onClick={() => setConfirmDesistOpen(false)} disabled={validerDesistLoading} className="rounded-lg">Annuler</Button>
+            <Button onClick={() => void handleValiderDesistement()} disabled={validerDesistLoading} className="rounded-lg bg-accent text-white hover:bg-accent/90">
+              {validerDesistLoading ? 'Validation…' : 'Valider le désistement'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
