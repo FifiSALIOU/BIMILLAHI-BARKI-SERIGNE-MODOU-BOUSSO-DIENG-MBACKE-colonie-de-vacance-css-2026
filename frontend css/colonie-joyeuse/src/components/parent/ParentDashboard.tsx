@@ -110,12 +110,15 @@ export default function ParentDashboard() {
   const allEnfants = transparenceEnfants;
   const allParents = transparenceParents;
 
+  /** Désistement validé : pas dans les onglets Liste P / N1 / N2 (même logique d’affichage que l’admin). */
+  const dansOngletsListeTransparence = (e: Enfant) => e.desistement !== 'validé';
+
   /** Fallback si `rangListe` absent (données mock) — ordre d’arrivée. Les données API ont `rangListe` = `rang_dans_liste`. */
   const rangAfficheParListe = useMemo(() => {
     const keys: Enfant['liste'][] = ['principale', 'attente_n1', 'attente_n2'];
     const out: Record<string, Map<number, number>> = {};
     for (const l of keys) {
-      const subset = allEnfants.filter((e) => e.liste === l);
+      const subset = allEnfants.filter((e) => e.liste === l && dansOngletsListeTransparence(e));
       out[l] = rangAfficheParDemandeIdPourEnfants(subset);
     }
     return out;
@@ -286,7 +289,7 @@ export default function ParentDashboard() {
 
   // List data for tabs — aligné sur `rang_dans_liste` (champ `rangListe`) comme côté gestionnaire
   const getListeEnfants = (liste: string) => {
-    const subset = allEnfants.filter((e) => e.liste === liste);
+    const subset = allEnfants.filter((e) => e.liste === liste && dansOngletsListeTransparence(e));
     return [...subset].sort((a, b) => {
       const hasA = typeof a.rangListe === 'number';
       const hasB = typeof b.rangListe === 'number';
