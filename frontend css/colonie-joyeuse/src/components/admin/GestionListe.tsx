@@ -109,7 +109,8 @@ export default function GestionListe({ type }: Props) {
       apiRequest<any[]>(`/admin/listes/${code}/demandes`, { token }),
       apiRequest<any[]>('/admin/desistements/en-attente', { token }),
     ]).then(([rows, desistements]) => {
-      const mapRows: Enfant[] = rows.map((d: any) => {
+      const mapRows: Enfant[] = rows
+        .map((d: any): Enfant => {
         const lu = listeApiToUi(d.liste);
         const apiDemandeStatut = String(d.statut || '');
         const isDesistee = apiDemandeStatut === 'DESISTEE';
@@ -146,7 +147,9 @@ export default function GestionListe({ type }: Props) {
         rang: d.rang || 0,
         reinscrit: !!d.is_reinscrit,
       };
-      });
+        })
+        /** Désistements validés : visibles uniquement dans « Demandes désistées », pas dans P / N1 / N2. */
+        .filter((e) => e.desistement !== 'validé');
       const idx: Record<number, number> = {};
       desistements.forEach((x) => {
         idx[x.demande_id] = x.desistement_id;
