@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import smtplib
 from email.message import EmailMessage
 from typing import Iterable, Sequence
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def _is_configured() -> bool:
@@ -16,6 +19,8 @@ def send_email(*, to: Sequence[str], subject: str, body: str, html_body: str | N
     """
     Envoi SMTP simple.
     - Si SMTP n'est pas configuré, on ne fait rien (no-op) pour ne pas casser l’API.
+    - Les erreurs réseau / auth sont journalisées : une tâche BackgroundTasks ne doit pas faire
+      tomber Uvicorn (Exception in ASGI application) si le serveur SMTP est indisponible.
     """
     if not to:
         return
@@ -31,19 +36,27 @@ def send_email(*, to: Sequence[str], subject: str, body: str, html_body: str | N
     if html_body:
         msg.add_alternative(html_body, subtype="html")
 
-    with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=20) as smtp:
-        smtp.ehlo()
-        try:
-            smtp.starttls()
+    try:
+        with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=20) as smtp:
             smtp.ehlo()
-        except Exception:
-            # Certains serveurs n'utilisent pas TLS sur ce port
-            pass
+            try:
+                smtp.starttls()
+                smtp.ehlo()
+            except Exception:
+                # Certains serveurs n'utilisent pas TLS sur ce port
+                pass
 
-        if s.smtp_username and s.smtp_password:
-            smtp.login(s.smtp_username, s.smtp_password)
+            if s.smtp_username and s.smtp_password:
+                smtp.login(s.smtp_username, s.smtp_password)
 
-        smtp.send_message(msg)
+            smtp.send_message(msg)
+    except Exception as exc:
+        logger.warning(
+            "Échec envoi e-mail (subject=%r, to=%s): %s — Vérifier SMTP_HOST / réseau ou laisser SMTP vide pour le dev.",
+            subject[:80] if subject else "",
+            list(to),
+            exc,
+        )
 
 
 def uniq_emails(emails: Iterable[str | None]) -> list[str]:
