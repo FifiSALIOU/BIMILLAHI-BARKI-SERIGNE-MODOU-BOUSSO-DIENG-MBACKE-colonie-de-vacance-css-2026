@@ -128,19 +128,32 @@ def create_user_superadmin(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payload parent requis.")
         if not matricule:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Matricule parent requis.")
+        mat_norm = matricule.strip()
+        if not mat_norm:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Matricule parent requis.")
+        existing_parent_login = (
+            db.query(User)
+            .filter(func.lower(User.matricule) == mat_norm.lower())
+            .first()
+        )
+        if existing_parent_login:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Un compte existe déjà avec ce matricule. Les lignes en doublon ne sont pas créées.",
+            )
         prenom = parent_payload["prenom"]
         nom_parent = parent_payload["nom"]
         service_nom = parent_payload["service"]
         site_code = parent_payload.get("site_code")
-        telephone = normalize_parent_telephone_for_storage(parent_payload.get("telephone"), matricule=matricule)
-        nin = normalize_parent_nin_for_storage(parent_payload.get("nin"), matricule=matricule)
+        telephone = normalize_parent_telephone_for_storage(parent_payload.get("telephone"), matricule=mat_norm)
+        nin = normalize_parent_nin_for_storage(parent_payload.get("nin"), matricule=mat_norm)
         genre = parent_payload.get("genre") or "-"
         adresse = parent_payload.get("adresse") or "-"
 
         user = User(
             role=role,
             name=name,
-            matricule=matricule,
+            matricule=mat_norm,
             password=hash_password(password),
             is_active=True,
             remember_token=None,
@@ -153,7 +166,7 @@ def create_user_superadmin(
         parent = Parent(
             prenom=prenom,
             nom=nom_parent,
-            matricule=matricule,
+            matricule=mat_norm,
             email=str(email).strip() if email else None,
             telephone=telephone,
             genre=genre,
