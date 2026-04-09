@@ -17,8 +17,8 @@ interface Props {
 export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const isListeActive = ['liste_principale', 'liste_n1', 'liste_n2', 'liste_desistees'].includes(currentPage);
-  const isHistoriqueActive = currentPage === 'historique';
+  const isListeActive = ['liste_principale', 'liste_n1', 'liste_n2'].includes(currentPage);
+  const isHistoriqueSectionActive = currentPage === 'historique' || currentPage === 'liste_desistees';
 
   return (
     <Sidebar collapsible="icon">
@@ -79,12 +79,15 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
                             <span>Liste N°2</span>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
+                        {/*
+                        Ancien emplacement sous « Gestion des listes » (désormais sous « Historique »).
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton onClick={() => onNavigate('liste_desistees')} isActive={currentPage === 'liste_desistees'}>
                             <span className="w-2 h-2 shrink-0 rounded-full bg-destructive/70" />
                             <span>Demandes désistées</span>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
+                        */}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
@@ -125,7 +128,7 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
               </SidebarMenuItem>
               */}
               {!collapsed ? (
-                <Collapsible defaultOpen={isHistoriqueActive}>
+                <Collapsible defaultOpen={isHistoriqueSectionActive}>
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton tooltip="Historique">
@@ -134,6 +137,12 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton onClick={() => onNavigate('liste_desistees')} isActive={currentPage === 'liste_desistees'}>
+                            <span className="w-2 h-2 shrink-0 rounded-full bg-destructive/70" />
+                            <span>Demandes désistées</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
                         <SidebarMenuSubItem>
                           <SidebarMenuSubButton onClick={() => onNavigate('historique')} isActive={currentPage === 'historique'}>
                             <span className="w-2 h-2 shrink-0 rounded-full bg-muted-foreground/70" />
@@ -146,7 +155,11 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
                 </Collapsible>
               ) : (
                 <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => onNavigate('historique')} isActive={isHistoriqueActive} tooltip="Historique — Journal des actions">
+                  <SidebarMenuButton
+                    onClick={() => onNavigate('historique')}
+                    isActive={isHistoriqueSectionActive}
+                    tooltip="Historique — Demandes désistées / Journal des actions"
+                  >
                     <History className="w-4 h-4" />
                   </SidebarMenuButton>
                 </SidebarMenuItem>
