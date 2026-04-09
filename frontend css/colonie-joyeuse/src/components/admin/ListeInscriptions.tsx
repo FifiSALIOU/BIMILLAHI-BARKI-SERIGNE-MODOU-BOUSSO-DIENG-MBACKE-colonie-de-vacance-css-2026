@@ -18,7 +18,7 @@ type Row = {
   rang: number;
   updatedAt?: string | null;
   reinscrit?: boolean;
-  desistementValide: boolean;
+  // desistementValide: boolean;
   parentMatricule: string;
   parentNom: string;
   parentPrenom: string;
@@ -54,8 +54,11 @@ export default function ListeInscriptions() {
       apiRequest<any[]>(`/admin/listes/${listeUiToApi('attente_n1')}/demandes`, { token }),
       apiRequest<any[]>(`/admin/listes/${listeUiToApi('attente_n2')}/demandes`, { token }),
     ]).then(([p, n1, n2]) => {
+      /** Désistements validés : comme en Gestion des listes — non affichés ici (voir « Demandes désistées »). */
       const mapRows = (list: any[]): Row[] =>
-        list.map((d) => {
+        list
+          .filter((d) => String(d.statut || '') !== 'DESISTEE')
+          .map((d) => {
           const lu = listeApiToUi(d.liste);
           return {
             id: String(d.demande_id),
@@ -63,7 +66,7 @@ export default function ListeInscriptions() {
             rang: Number(d.rang) || 0,
             updatedAt: d.updated_at ?? null,
             reinscrit: !!d.is_reinscrit,
-            desistementValide: String(d.statut || '') === 'DESISTEE',
+            // desistementValide: String(d.statut || '') === 'DESISTEE',
             parentMatricule: d.parent_matricule,
             parentNom: d.parent_nom,
             parentPrenom: d.parent_prenom,
