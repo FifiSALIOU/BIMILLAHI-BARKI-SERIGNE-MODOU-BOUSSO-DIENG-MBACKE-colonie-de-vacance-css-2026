@@ -18,6 +18,7 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const isListeActive = ['liste_principale', 'liste_n1', 'liste_n2', 'liste_desistees'].includes(currentPage);
+  const isHistoriqueActive = currentPage === 'historique';
 
   return (
     <Sidebar collapsible="icon">
@@ -116,11 +117,40 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
+              {/* Ancien menu : entrée unique « Historique » (sans sous-section).
               <SidebarMenuItem>
                 <SidebarMenuButton onClick={() => onNavigate('historique')} isActive={currentPage === 'historique'} tooltip="Historique">
                   <History className="w-4 h-4" />{!collapsed && <span>Historique</span>}
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              */}
+              {!collapsed ? (
+                <Collapsible defaultOpen={isHistoriqueActive}>
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton tooltip="Historique">
+                        <History className="w-4 h-4" /><span className="flex-1">Historique</span><ChevronDown className="w-3 h-3" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton onClick={() => onNavigate('historique')} isActive={currentPage === 'historique'}>
+                            <span className="w-2 h-2 shrink-0 rounded-full bg-muted-foreground/70" />
+                            <span>Journal des actions</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              ) : (
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => onNavigate('historique')} isActive={isHistoriqueActive} tooltip="Historique — Journal des actions">
+                    <History className="w-4 h-4" />
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
