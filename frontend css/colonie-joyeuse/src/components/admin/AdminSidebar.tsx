@@ -18,7 +18,8 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const isListeActive = ['liste_principale', 'liste_n1', 'liste_n2'].includes(currentPage);
-  const isHistoriqueSectionActive = currentPage === 'historique' || currentPage === 'liste_desistees';
+  const isHistoriqueSectionActive =
+    currentPage === 'historique' || currentPage === 'liste_desistees' || currentPage === 'liste_rejetees';
 
   return (
     <Sidebar collapsible="icon">
@@ -144,6 +145,12 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                         <SidebarMenuSubItem>
+                          <SidebarMenuSubButton onClick={() => onNavigate('liste_rejetees')} isActive={currentPage === 'liste_rejetees'}>
+                            <span className="w-2 h-2 shrink-0 rounded-full bg-amber-600/80" />
+                            <span>Demandes rejetées</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
                           <SidebarMenuSubButton onClick={() => onNavigate('historique')} isActive={currentPage === 'historique'}>
                             <span className="w-2 h-2 shrink-0 rounded-full bg-muted-foreground/70" />
                             <span>Journal des actions</span>
@@ -158,7 +165,7 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
                   <SidebarMenuButton
                     onClick={() => onNavigate('historique')}
                     isActive={isHistoriqueSectionActive}
-                    tooltip="Historique — Demandes désistées / Journal des actions"
+                    tooltip="Historique — Demandes désistées / rejetées / Journal des actions"
                   >
                     <History className="w-4 h-4" />
                   </SidebarMenuButton>
