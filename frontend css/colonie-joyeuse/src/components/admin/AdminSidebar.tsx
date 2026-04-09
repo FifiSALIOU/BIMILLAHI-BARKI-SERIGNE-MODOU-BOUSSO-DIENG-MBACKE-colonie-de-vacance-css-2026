@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { LayoutDashboard, FileText, List, BarChart3, Users, Settings, ChevronDown, Award, UserCheck, History, Database, ListChecks, MapPin, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, FileText, List, BarChart3, Users, Settings, ChevronDown, /* Award, */ UserCheck, History, Database, ListChecks, MapPin, MessageSquare } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import logo from '@/assets/logo.png';
 
@@ -17,7 +17,8 @@ interface Props {
 export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const isListeActive = ['liste_principale', 'liste_n1', 'liste_n2'].includes(currentPage);
+  // const isListeActive = ['liste_principale', 'liste_n1', 'liste_n2'].includes(currentPage);
+  const isListeActive = ['liste_principale', 'liste_n1', 'liste_n2', 'liste_finale'].includes(currentPage);
   const isHistoriqueSectionActive =
     currentPage === 'historique' || currentPage === 'liste_desistees' || currentPage === 'liste_rejetees';
 
@@ -80,6 +81,12 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
                             <span>Liste N°2</span>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton onClick={() => onNavigate('liste_finale')} isActive={currentPage === 'liste_finale'}>
+                            <span className="w-2 h-2 shrink-0 rounded-full bg-amber-500" />
+                            <span>Liste finale des retenus</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
                         {/*
                         Ancien emplacement sous « Gestion des listes » (désormais sous « Historique »).
                         <SidebarMenuSubItem>
@@ -95,17 +102,21 @@ export function AdminSidebar({ currentPage, onNavigate, isSuperAdmin }: Props) {
                 </Collapsible>
               ) : (
                 <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => onNavigate('liste_principale')} isActive={isListeActive} tooltip="Gestion des listes">
+                  {/* tooltip précédent (sans liste finale dans le sous-menu replié) : "Gestion des listes" */}
+                  <SidebarMenuButton onClick={() => onNavigate('liste_principale')} isActive={isListeActive} tooltip="Gestion des listes — Principale, N1, N2, Liste finale">
                     <List className="w-4 h-4" />
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
 
+              {/*
+              Ancienne entrée séparée « Liste finale des retenus » (désormais sous Gestion des listes > Liste N°2).
               <SidebarMenuItem>
                 <SidebarMenuButton onClick={() => onNavigate('liste_finale')} isActive={currentPage === 'liste_finale'} tooltip="Liste finale">
                   <Award className="w-4 h-4" />{!collapsed && <span>Liste finale des retenus</span>}
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              */}
 
               {isSuperAdmin && (
                 <SidebarMenuItem>
